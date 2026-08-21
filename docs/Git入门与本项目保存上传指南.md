@@ -153,6 +153,9 @@ git rev-parse origin/main
 | 首次提交 | `05db5309da39a422495df833225e2a15a23b9f50` |
 | 首次推送 | `main -> origin/main`，已成功建立跟踪关系 |
 | 首次远端验证 | 本地 `main`、`origin/main` 和 GitHub `refs/heads/main` 均指向 `05db5309...` |
+| 首次 CI | Debug、测试、Sanitizer 通过；格式检查失败，证明源码尚未统一格式化 |
+| CI 修复 | 提交 `54e35a3` 统一格式；本地复测 30/30 通过 |
+| 最终 CI | 运行 `32440556002` 的静态分析、Debug 和 Sanitizer 三个 Job 全部成功 |
 
 提交号由提交内容计算，提交前无法预先填写。本表已在首次上传成功后填入实测结果。任何时候
 都可重新取得当前实际记录：

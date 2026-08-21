@@ -56,7 +56,8 @@ ctest --test-dir C:/Users/CC/.cache/rkav-build/debug --output-on-failure --timeo
 
 - 已记录架构、系统和内核；CPU、内存、温度和磁盘的完整基线仍需留档。
 - 尚未执行 Linux ASan/UBSan；Windows MinGW 仅完成普通 Debug 测试。
-- 本机未安装 clang-format/clang-tidy；规则和 CI 门禁已加入，但首次 CI 结果仍需确认。
+- Windows PATH 中没有原生 clang-format/clang-tidy；已用临时 clang-format 工具统一格式，
+  GitHub Actions 的格式检查、clang-tidy、Debug、30 项测试和 ASan/UBSan 已全部通过。
 - 尚未执行 30 分钟和 2 小时 RK3568 长稳测试。
 - systemd 文件已提供，但当前 Buildroot 使用 SysV init；需另做 BusyBox 兼容启动脚本。
 - SIGINT/SIGTERM 处理代码已实现，仍需在 Linux 进程级集成测试中验证。
