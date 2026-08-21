@@ -11,7 +11,7 @@
 namespace rkav {
 
 class ChecksumVideoEncoder final : public IVideoEncoder {
-public:
+   public:
     /// 保存关键帧周期并进入可编码状态。
     Result<void> Open(const VideoEncoderConfig& config) override;
     /// 校验视频帧并生成一个只含摘要信息的 Mock 视频包。
@@ -21,15 +21,15 @@ public:
     /// 关闭编码器。
     void Close() noexcept override;
 
-private:
+   private:
     std::mutex mutex_;  // 保护编码器状态，接口可从生命周期线程安全关闭。
     VideoEncoderConfig config_;  // 关键帧周期等配置。
-    bool open_{false};            // 是否已 Open。
-    bool flushed_{false};         // 是否已结束输入。
+    bool open_{false};           // 是否已 Open。
+    bool flushed_{false};        // 是否已结束输入。
 };
 
 class ChecksumAudioEncoder final : public IAudioEncoder {
-public:
+   public:
     /// 重置连续性检查状态并进入可编码状态。
     Result<void> Open(const AudioEncoderConfig& config) override;
     /// 校验 PCM 块和 PTS 连续性，然后生成一个摘要包。
@@ -39,10 +39,10 @@ public:
     /// 关闭编码器。
     void Close() noexcept override;
 
-private:
-    std::mutex mutex_;  // 保护以下编码状态。
-    bool open_{false};  // 是否已 Open。
-    bool flushed_{false};  // 是否已结束输入。
+   private:
+    std::mutex mutex_;                                 // 保护以下编码状态。
+    bool open_{false};                                 // 是否已 Open。
+    bool flushed_{false};                              // 是否已结束输入。
     std::optional<TimestampUs> expected_next_pts_us_;  // 下一块必须使用的微秒 PTS。
 };
 

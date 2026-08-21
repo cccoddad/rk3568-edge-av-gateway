@@ -37,8 +37,7 @@ Result<AudioCapabilities> MockAudioCapture::Open(const AudioConfig& config) {
     sample_index_ = 0;
     last_injected_xrun_sequence_.reset();
     open_ = true;
-    const int samples =
-        config.sample_rate * config.frame_duration_ms / 1000;  // 每声道每块样本数。
+    const int samples = config.sample_rate * config.frame_duration_ms / 1000;  // 每声道每块样本数。
     return Result<AudioCapabilities>::Success(
         AudioCapabilities{config.sample_rate, config.channels, samples, config.format});
 }
@@ -46,10 +45,10 @@ Result<AudioCapabilities> MockAudioCapture::Open(const AudioConfig& config) {
 /// 功能：生成一个连续 PCM 数据块，或在配置指定的位置返回可诊断故障。
 /// 参数 stop：停止时可中断实时节拍等待；返回 kCancelled 不算设备错误。
 Result<AudioFrame> MockAudioCapture::Read(std::stop_token stop) {
-    AudioConfig config;               // 本次读取使用的配置快照。
-    TimestampUs start_us = 0;         // 音频时间轴起点，单位微秒。
-    std::uint64_t sequence = 0;       // 本次准备生成的逻辑块序号。
-    std::uint64_t first_sample = 0;   // 本块首样本在连续波形中的绝对索引。
+    AudioConfig config;              // 本次读取使用的配置快照。
+    TimestampUs start_us = 0;        // 音频时间轴起点，单位微秒。
+    std::uint64_t sequence = 0;      // 本次准备生成的逻辑块序号。
+    std::uint64_t first_sample = 0;  // 本块首样本在连续波形中的绝对索引。
     {
         // 只在复制共享状态时持锁，生成大量样本时不占用 mutex_。
         std::scoped_lock lock(mutex_);
@@ -69,8 +68,8 @@ Result<AudioFrame> MockAudioCapture::Read(std::stop_token stop) {
     }
     if (config.failure.disconnect_after_blocks.has_value() &&
         sequence >= *config.failure.disconnect_after_blocks) {
-        return Result<AudioFrame>::Failure(
-            AudioError(ErrorCategory::kDeviceDisconnected, "injected microphone disconnection", true));
+        return Result<AudioFrame>::Failure(AudioError(ErrorCategory::kDeviceDisconnected,
+                                                      "injected microphone disconnection", true));
     }
     if (config.failure.xrun_every_blocks.has_value() && sequence > 0U &&
         sequence % *config.failure.xrun_every_blocks == 0U) {
@@ -83,8 +82,7 @@ Result<AudioFrame> MockAudioCapture::Read(std::stop_token stop) {
         }
     }
 
-    const TimestampUs frame_duration_us =
-        static_cast<TimestampUs>(config.frame_duration_ms) * 1000;
+    const TimestampUs frame_duration_us = static_cast<TimestampUs>(config.frame_duration_ms) * 1000;
     const TimestampUs pts_us =
         start_us + static_cast<TimestampUs>(sequence) * frame_duration_us;  // 本块 PTS。
     if (config.realtime && !clock_->WaitUntil(pts_us, stop)) {
@@ -94,21 +92,22 @@ Result<AudioFrame> MockAudioCapture::Read(std::stop_token stop) {
 
     const int samples_per_channel =
         config.sample_rate * config.frame_duration_ms / 1000;  // 单声道样本数。
-    const std::size_t total_samples = static_cast<std::size_t>(samples_per_channel) *
-                                      static_cast<std::size_t>(config.channels);  // 全声道样本总数。
+    const std::size_t total_samples =
+        static_cast<std::size_t>(samples_per_channel) *
+        static_cast<std::size_t>(config.channels);  // 全声道样本总数。
     auto buffer = Buffer::Allocate(total_samples * sizeof(std::int16_t));  // S16_LE 输出内存。
     auto* output = reinterpret_cast<std::int16_t*>(buffer->data());  // 便于按 int16_t 写样本。
     // 相位基于全局 sample_index，而不是每块从零开始，保证块边界波形连续。
     for (int sample = 0; sample < samples_per_channel; ++sample) {
         std::int16_t value = 0;
         if (config.signal == "sine") {
-            const double phase = 2.0 * std::numbers::pi * config.frequency_hz *
-                                 static_cast<double>(first_sample +
-                                                     static_cast<std::uint64_t>(sample)) /
-                                 static_cast<double>(config.sample_rate);  // 当前样本弧度相位。
+            const double phase =
+                2.0 * std::numbers::pi * config.frequency_hz *
+                static_cast<double>(first_sample + static_cast<std::uint64_t>(sample)) /
+                static_cast<double>(config.sample_rate);  // 当前样本弧度相位。
             const double normalized = std::clamp(config.amplitude * std::sin(phase), -1.0, 1.0);
-            value = static_cast<std::int16_t>(
-                std::lround(normalized * static_cast<double>(std::numeric_limits<std::int16_t>::max())));
+            value = static_cast<std::int16_t>(std::lround(
+                normalized * static_cast<double>(std::numeric_limits<std::int16_t>::max())));
         }
         for (int channel = 0; channel < config.channels; ++channel) {
             output[static_cast<std::size_t>(sample) * static_cast<std::size_t>(config.channels) +
@@ -121,8 +120,13 @@ Result<AudioFrame> MockAudioCapture::Read(std::stop_token stop) {
         sample_index_ += static_cast<std::uint64_t>(samples_per_channel);
     }
 
-    AudioFrame frame{sequence, pts_us, config.sample_rate, config.channels, samples_per_channel,
-                     SampleFormat::kS16LE, std::move(buffer)};
+    AudioFrame frame{sequence,
+                     pts_us,
+                     config.sample_rate,
+                     config.channels,
+                     samples_per_channel,
+                     SampleFormat::kS16LE,
+                     std::move(buffer)};
     return Result<AudioFrame>::Success(std::move(frame));
 }
 

@@ -39,9 +39,8 @@ Error EncoderError(std::string_view module, ErrorCategory category, std::string 
 Result<void> ChecksumVideoEncoder::Open(const VideoEncoderConfig& config) {
     std::scoped_lock lock(mutex_);
     if (open_) {
-        return Result<void>::Failure(
-            EncoderError("checksum_video_encoder", ErrorCategory::kInvalidState,
-                         "encoder is already open"));
+        return Result<void>::Failure(EncoderError(
+            "checksum_video_encoder", ErrorCategory::kInvalidState, "encoder is already open"));
     }
     config_ = config;
     open_ = true;
@@ -61,20 +60,19 @@ Result<std::vector<EncodedPacket>> ChecksumVideoEncoder::Encode(const VideoFrame
     if (!validation) {
         return Result<std::vector<EncodedPacket>>::Failure(validation.error());
     }
-    auto pts = RescaleTimestamp(frame.pts_us, Rational{1, 1'000'000}); // 包时间基仍为微秒。
+    auto pts = RescaleTimestamp(frame.pts_us, Rational{1, 1'000'000});  // 包时间基仍为微秒。
     if (!pts) {
         return Result<std::vector<EncodedPacket>>::Failure(pts.error());
     }
-    EncodedPacket packet{StreamKind::kVideo,
-                         frame.sequence,
-                         pts.value(),
-                         pts.value(),
-                         Rational{1, 1'000'000},
-                         frame.sequence %
-                                 static_cast<std::uint64_t>(config_.mock_keyframe_interval) ==
-                             0U,
-                         Codec::kMockVideoChecksum,
-                         MakePayload(frame.sequence, *frame.buffer)};
+    EncodedPacket packet{
+        StreamKind::kVideo,
+        frame.sequence,
+        pts.value(),
+        pts.value(),
+        Rational{1, 1'000'000},
+        frame.sequence % static_cast<std::uint64_t>(config_.mock_keyframe_interval) == 0U,
+        Codec::kMockVideoChecksum,
+        MakePayload(frame.sequence, *frame.buffer)};
     return Result<std::vector<EncodedPacket>>::Success({std::move(packet)});
 }
 
@@ -82,9 +80,8 @@ Result<std::vector<EncodedPacket>> ChecksumVideoEncoder::Encode(const VideoFrame
 Result<std::vector<EncodedPacket>> ChecksumVideoEncoder::Flush() {
     std::scoped_lock lock(mutex_);
     if (!open_) {
-        return Result<std::vector<EncodedPacket>>::Failure(
-            EncoderError("checksum_video_encoder", ErrorCategory::kInvalidState,
-                         "encoder is not open"));
+        return Result<std::vector<EncodedPacket>>::Failure(EncoderError(
+            "checksum_video_encoder", ErrorCategory::kInvalidState, "encoder is not open"));
     }
     flushed_ = true;
     return Result<std::vector<EncodedPacket>>::Success({});
@@ -100,9 +97,8 @@ void ChecksumVideoEncoder::Close() noexcept {
 Result<void> ChecksumAudioEncoder::Open(const AudioEncoderConfig&) {
     std::scoped_lock lock(mutex_);
     if (open_) {
-        return Result<void>::Failure(
-            EncoderError("checksum_audio_encoder", ErrorCategory::kInvalidState,
-                         "encoder is already open"));
+        return Result<void>::Failure(EncoderError(
+            "checksum_audio_encoder", ErrorCategory::kInvalidState, "encoder is already open"));
     }
     open_ = true;
     flushed_ = false;
@@ -124,9 +120,8 @@ Result<std::vector<EncodedPacket>> ChecksumAudioEncoder::Encode(const AudioFrame
     }
     // 音频不允许跳块或倒退，任何 PTS 不连续都说明上游已经破坏 PCM 连续性。
     if (expected_next_pts_us_.has_value() && frame.pts_us != *expected_next_pts_us_) {
-        return Result<std::vector<EncodedPacket>>::Failure(
-            EncoderError("checksum_audio_encoder", ErrorCategory::kCodec,
-                         "audio PTS is not continuous"));
+        return Result<std::vector<EncodedPacket>>::Failure(EncoderError(
+            "checksum_audio_encoder", ErrorCategory::kCodec, "audio PTS is not continuous"));
     }
     const TimestampUs duration_us =
         static_cast<TimestampUs>(frame.samples_per_channel) * 1'000'000 / frame.sample_rate;
@@ -148,9 +143,8 @@ Result<std::vector<EncodedPacket>> ChecksumAudioEncoder::Encode(const AudioFrame
 Result<std::vector<EncodedPacket>> ChecksumAudioEncoder::Flush() {
     std::scoped_lock lock(mutex_);
     if (!open_) {
-        return Result<std::vector<EncodedPacket>>::Failure(
-            EncoderError("checksum_audio_encoder", ErrorCategory::kInvalidState,
-                         "encoder is not open"));
+        return Result<std::vector<EncodedPacket>>::Failure(EncoderError(
+            "checksum_audio_encoder", ErrorCategory::kInvalidState, "encoder is not open"));
     }
     flushed_ = true;
     return Result<std::vector<EncodedPacket>>::Success({});

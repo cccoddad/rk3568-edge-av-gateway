@@ -19,8 +19,7 @@ TimestampUs RawSteadyNowUs() noexcept {
 
 /// 功能：构造 clock 模块的统一计算错误。
 Error ClockError(std::string message) {
-    return Error{ErrorCategory::kInvalidConfig, 0, "clock", "calculate", std::move(message),
-                 false};
+    return Error{ErrorCategory::kInvalidConfig, 0, "clock", "calculate", std::move(message), false};
 }
 
 }  // namespace
@@ -45,8 +44,8 @@ bool SteadyClock::WaitUntil(TimestampUs deadline_us, std::stop_token stop) {
     std::mutex mutex;
     std::condition_variable_any condition;
     std::unique_lock lock(mutex);
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::microseconds(remaining_us);
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::microseconds(remaining_us);
     condition.wait_until(lock, stop, deadline, [] { return false; });
     return !stop.stop_requested();
 }
@@ -101,15 +100,15 @@ Result<TimestampUs> FramePacer::DeadlineFor(std::uint64_t sequence) const {
     }
     // 拆成整秒和余帧再计算，可避免 sequence * 1,000,000 过早溢出。
     const std::uint64_t whole_seconds = sequence / fps_;
-    const std::uint64_t remainder = sequence % fps_;  // 当前整秒内的余帧数。
+    const std::uint64_t remainder = sequence % fps_;        // 当前整秒内的余帧数。
     constexpr std::uint64_t kMicrosPerSecond = 1'000'000U;  // 一秒的微秒数。
     const std::uint64_t max_timestamp =
         static_cast<std::uint64_t>(std::numeric_limits<TimestampUs>::max());
     if (whole_seconds > max_timestamp / kMicrosPerSecond) {
         return Result<TimestampUs>::Failure(ClockError("frame deadline overflow"));
     }
-    const std::uint64_t offset = whole_seconds * kMicrosPerSecond +
-                                 remainder * kMicrosPerSecond / fps_;
+    const std::uint64_t offset =
+        whole_seconds * kMicrosPerSecond + remainder * kMicrosPerSecond / fps_;
     if (start_us_ < 0 || offset > max_timestamp - static_cast<std::uint64_t>(start_us_)) {
         return Result<TimestampUs>::Failure(ClockError("frame deadline overflow"));
     }

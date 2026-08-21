@@ -16,7 +16,7 @@ enum class LogLevel { kTrace, kDebug, kInfo, kWarn, kError, kFatal };
 using LogField = std::pair<std::string, std::string>;
 
 class Logger {
-public:
+   public:
     /// 返回进程内唯一日志器实例。
     static Logger& Instance();
 
@@ -28,12 +28,12 @@ public:
     void Log(LogLevel level, std::string_view module, std::string_view event,
              std::string_view message, std::initializer_list<LogField> fields = {});
 
-private:
+   private:
     Logger() = default;
 
     std::mutex mutex_;  // 保护配置和整行写入，防止多线程日志相互穿插。
     LogLevel minimum_level_{LogLevel::kInfo};  // 当前最低输出级别。
-    std::ostream* output_{nullptr};  // nullptr 表示使用默认标准输出。
+    std::ostream* output_{nullptr};            // nullptr 表示使用默认标准输出。
 };
 
 /// 将日志级别转换成稳定的小写字符串。

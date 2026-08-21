@@ -4,10 +4,9 @@
 
 #include <chrono>
 #include <filesystem>
+#include <nlohmann/json.hpp>
 #include <thread>
 #include <utility>
-
-#include <nlohmann/json.hpp>
 
 namespace rkav {
 namespace {
@@ -22,8 +21,7 @@ Error SinkError(std::string_view module, ErrorCategory category, std::string mes
 Result<void> ApplyFaultAndDelay(const OutputConfig& config, std::uint64_t packet_count,
                                 std::string_view module) {
     // 故障和延迟均由配置确定，集成测试可以在相同包序号稳定复现。
-    if (config.fail_after_packets.has_value() &&
-        packet_count >= *config.fail_after_packets) {
+    if (config.fail_after_packets.has_value() && packet_count >= *config.fail_after_packets) {
         return Result<void>::Failure(
             SinkError(module, ErrorCategory::kIo, "injected packet sink failure", false));
     }
@@ -151,16 +149,15 @@ Result<void> JsonLinePacketSink::Write(const EncodedPacket& packet) {
         return validation;
     }
     // JSONL 只记录可诊断元数据，不展开二进制 payload，避免日志文件失控。
-    nlohmann::json record{{"stream", ToString(packet.kind)}, // 当前包的 JSON 元数据。
-                          {"codec", ToString(packet.codec)},
-                          {"source_sequence", packet.source_sequence},
-                          {"pts", packet.pts},
-                          {"dts", packet.dts},
-                          {"time_base",
-                           {{"num", packet.time_base.numerator},
-                            {"den", packet.time_base.denominator}}},
-                          {"key_frame", packet.key_frame},
-                          {"payload_bytes", packet.buffer->size()}};
+    nlohmann::json record{
+        {"stream", ToString(packet.kind)},  // 当前包的 JSON 元数据。
+        {"codec", ToString(packet.codec)},
+        {"source_sequence", packet.source_sequence},
+        {"pts", packet.pts},
+        {"dts", packet.dts},
+        {"time_base", {{"num", packet.time_base.numerator}, {"den", packet.time_base.denominator}}},
+        {"key_frame", packet.key_frame},
+        {"payload_bytes", packet.buffer->size()}};
     output_ << record.dump() << '\n';
     if (!output_) {
         return Result<void>::Failure(
@@ -205,9 +202,8 @@ Result<std::unique_ptr<IPacketSink>> CreatePacketSink(const OutputConfig& config
         return Result<std::unique_ptr<IPacketSink>>::Success(
             std::make_unique<JsonLinePacketSink>());
     }
-    return Result<std::unique_ptr<IPacketSink>>::Failure(
-        SinkError("sink_factory", ErrorCategory::kNotSupported,
-                  "unsupported sink type: " + config.type));
+    return Result<std::unique_ptr<IPacketSink>>::Failure(SinkError(
+        "sink_factory", ErrorCategory::kNotSupported, "unsupported sink type: " + config.type));
 }
 
 }  // namespace rkav

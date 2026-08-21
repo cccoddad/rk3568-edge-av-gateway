@@ -9,13 +9,18 @@
 namespace rkav {
 namespace {
 
-constexpr std::array<const char*, static_cast<std::size_t>(MetricCounter::kCount)>
-    kCounterNames{"video_captured_total",   "audio_captured_total", // 枚举索引到 JSON 键。
-                  "inference_requests_total", "inference_results_total",
-                  "video_packets_total",    "audio_packets_total",
-                  "packets_routed_total",    "packets_consumed_total",
-                  "errors_total",           "recoveries_total",
-                  "expired_detections_total"};
+constexpr std::array<const char*, static_cast<std::size_t>(MetricCounter::kCount)> kCounterNames{
+    "video_captured_total",
+    "audio_captured_total",  // 枚举索引到 JSON 键。
+    "inference_requests_total",
+    "inference_results_total",
+    "video_packets_total",
+    "audio_packets_total",
+    "packets_routed_total",
+    "packets_consumed_total",
+    "errors_total",
+    "recoveries_total",
+    "expired_detections_total"};
 
 /// 功能：在传入样本副本上计算指定百分位数；空样本返回 0。
 TimestampUs Percentile(std::vector<TimestampUs> values, double percentile) {
@@ -26,7 +31,7 @@ TimestampUs Percentile(std::vector<TimestampUs> values, double percentile) {
     std::sort(values.begin(), values.end());
     const double position =
         percentile * static_cast<double>(values.size() - 1U);  // 百分位对应浮点位置。
-    const auto index = static_cast<std::size_t>(std::llround(position)); // 最近样本索引。
+    const auto index = static_cast<std::size_t>(std::llround(position));  // 最近样本索引。
     return values[index];
 }
 
@@ -55,8 +60,8 @@ void MetricsRegistry::ObserveLatency(std::string_view stage, TimestampUs latency
     auto& samples = latencies_[std::string(stage)];  // 该阶段可变样本数组。
     if (samples.size() >= latency_window_) {
         // 每次淘汰最旧的四分之一，降低每次满窗口都移动整个数组的开销。
-        samples.erase(samples.begin(), samples.begin() +
-                                            static_cast<std::ptrdiff_t>(samples.size() / 4U));
+        samples.erase(samples.begin(),
+                      samples.begin() + static_cast<std::ptrdiff_t>(samples.size() / 4U));
     }
     samples.push_back(latency_us);
 }
@@ -71,27 +76,26 @@ void MetricsRegistry::UpdateQueue(std::string_view name, const QueueSnapshot& sn
 nlohmann::json MetricsRegistry::Snapshot() const {
     nlohmann::json result;  // 本次返回的完整指标对象。
     for (std::size_t index = 0; index < kCounterCount; ++index) {
-        result["counters"][kCounterNames[index]] =
-            counters_[index].load(std::memory_order_relaxed);
+        result["counters"][kCounterNames[index]] = counters_[index].load(std::memory_order_relaxed);
     }
 
     std::scoped_lock lock(mutex_);
     for (const auto& [name, samples] : latencies_) {
         result["latency_us"][name] = {{"samples", samples.size()},
-                                       {"p50", Percentile(samples, 0.50)},
-                                       {"p95", Percentile(samples, 0.95)},
-                                       {"p99", Percentile(samples, 0.99)}};
+                                      {"p50", Percentile(samples, 0.50)},
+                                      {"p95", Percentile(samples, 0.95)},
+                                      {"p99", Percentile(samples, 0.99)}};
     }
     for (const auto& [name, queue] : queues_) {
         result["queues"][name] = {{"size", queue.size},
-                                   {"capacity", queue.capacity},
-                                   {"high_watermark", queue.high_watermark},
-                                   {"pushed", queue.pushed},
-                                   {"popped", queue.popped},
-                                   {"dropped", queue.dropped},
-                                   {"push_timeouts", queue.push_timeouts},
-                                   {"pop_timeouts", queue.pop_timeouts},
-                                   {"closed", queue.closed}};
+                                  {"capacity", queue.capacity},
+                                  {"high_watermark", queue.high_watermark},
+                                  {"pushed", queue.pushed},
+                                  {"popped", queue.popped},
+                                  {"dropped", queue.dropped},
+                                  {"push_timeouts", queue.push_timeouts},
+                                  {"pop_timeouts", queue.pop_timeouts},
+                                  {"closed", queue.closed}};
     }
     return result;
 }
@@ -136,9 +140,7 @@ std::uint64_t WorkerHealth::consecutive_errors() const noexcept {
 }
 
 /// 功能：返回当前 worker 状态；acquire 与 SetState 的 release 配对。
-WorkerState WorkerHealth::state() const noexcept {
-    return state_.load(std::memory_order_acquire);
-}
+WorkerState WorkerHealth::state() const noexcept { return state_.load(std::memory_order_acquire); }
 
 /// 功能：把 worker 状态转换成稳定字符串。
 const char* ToString(WorkerState state) noexcept {

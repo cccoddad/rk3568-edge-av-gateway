@@ -38,8 +38,7 @@ TEST(GeometryTest, LetterboxRoundTripMapsToOriginalImage) {
     EXPECT_EQ(transform.value().resized_height, 360);
     EXPECT_EQ(transform.value().pad_top, 140);
 
-    const RectF source =
-        MapBoxToSource(RectF{0.0F, 140.0F, 640.0F, 360.0F}, transform.value());
+    const RectF source = MapBoxToSource(RectF{0.0F, 140.0F, 640.0F, 360.0F}, transform.value());
     EXPECT_FLOAT_EQ(source.x, 0.0F);
     EXPECT_FLOAT_EQ(source.y, 0.0F);
     EXPECT_FLOAT_EQ(source.width, 1920.0F);
@@ -51,8 +50,7 @@ TEST(GeometryTest, ClipsModelBoxesThatOverlapPadding) {
     const auto transform = ComputeLetterboxTransform(1920, 1080, 640, 640);
     ASSERT_TRUE(transform);
 
-    const RectF source =
-        MapBoxToSource(RectF{-10.0F, 100.0F, 700.0F, 500.0F}, transform.value());
+    const RectF source = MapBoxToSource(RectF{-10.0F, 100.0F, 700.0F, 500.0F}, transform.value());
     EXPECT_FLOAT_EQ(source.x, 0.0F);
     EXPECT_FLOAT_EQ(source.y, 0.0F);
     EXPECT_FLOAT_EQ(source.width, 1920.0F);
@@ -61,8 +59,7 @@ TEST(GeometryTest, ClipsModelBoxesThatOverlapPadding) {
 
 // 验证 RGB888 stride 小于 width*3 时必须拒绝，防止后续像素访问越界。
 TEST(TypeValidationTest, RejectsRgbFrameWithShortStride) {
-    VideoFrame frame{0, 0, 64, 48, 64, PixelFormat::kRgb888,
-                     Buffer::Allocate(64U * 48U), {}};
+    VideoFrame frame{0, 0, 64, 48, 64, PixelFormat::kRgb888, Buffer::Allocate(64U * 48U), {}};
 
     auto result = ValidateVideoFrame(frame);
     ASSERT_FALSE(result);

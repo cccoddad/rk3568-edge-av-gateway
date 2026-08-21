@@ -23,26 +23,26 @@ enum class QueueStatus { kOk, kTimeout, kClosed, kDropped, kCancelled };
 enum class CloseMode { kDrain, kAbort };
 
 struct QueueSnapshot {
-    std::size_t size{0};            // 快照时仍在队列中的元素数。
-    std::size_t capacity{0};        // 固定容量上限。
-    std::size_t high_watermark{0};  // 历史最大占用，用于判断容量是否合适。
-    std::uint64_t pushed{0};        // 成功入队次数。
-    std::uint64_t popped{0};        // 成功出队次数。
-    std::uint64_t dropped{0};       // 因溢出或 Abort 被丢弃的元素数。
-    std::uint64_t push_timeouts{0}; // 生产者等待空位超时次数。
-    std::uint64_t pop_timeouts{0};  // 消费者等待数据超时次数。
-    bool closed{false};             // 是否已禁止新的 Push。
+    std::size_t size{0};             // 快照时仍在队列中的元素数。
+    std::size_t capacity{0};         // 固定容量上限。
+    std::size_t high_watermark{0};   // 历史最大占用，用于判断容量是否合适。
+    std::uint64_t pushed{0};         // 成功入队次数。
+    std::uint64_t popped{0};         // 成功出队次数。
+    std::uint64_t dropped{0};        // 因溢出或 Abort 被丢弃的元素数。
+    std::uint64_t push_timeouts{0};  // 生产者等待空位超时次数。
+    std::uint64_t pop_timeouts{0};   // 消费者等待数据超时次数。
+    bool closed{false};              // 是否已禁止新的 Push。
 };
 
 template <typename T>
 struct QueuePopResult {
-    QueueStatus status{QueueStatus::kClosed}; // 本次 Pop 的明确结果。
-    std::optional<T> item;                    // 仅 kOk 时包含元素。
+    QueueStatus status{QueueStatus::kClosed};  // 本次 Pop 的明确结果。
+    std::optional<T> item;                     // 仅 kOk 时包含元素。
 };
 
 template <typename T>
 class BoundedQueue {
-public:
+   public:
     /// 创建固定容量队列；capacity 为 0 属于编程错误并抛 invalid_argument。
     explicit BoundedQueue(std::size_t capacity,
                           OverflowPolicy policy = OverflowPolicy::kBlockProducer)
@@ -121,8 +121,7 @@ public:
 
     /// 等待并取出队首元素；队列 Drain 关闭后仍会先返回剩余元素。
     QueuePopResult<T> Pop(std::stop_token stop = {},
-                          std::chrono::milliseconds timeout =
-                              std::chrono::milliseconds::max()) {
+                          std::chrono::milliseconds timeout = std::chrono::milliseconds::max()) {
         // 同 Push 一样，取消请求必须能唤醒正在等待数据的消费者。
         std::stop_callback cancel_callback(stop, [this] { not_empty_.notify_all(); });
         std::unique_lock lock(mutex_);
@@ -181,25 +180,25 @@ public:
     /// 在同一把锁下复制全部统计，保证快照内部字段彼此一致。
     [[nodiscard]] QueueSnapshot Snapshot() const {
         std::scoped_lock lock(mutex_);
-        return QueueSnapshot{items_.size(), capacity_, high_watermark_, pushed_,
-                             popped_,      dropped_,  push_timeouts_, pop_timeouts_, closed_};
+        return QueueSnapshot{items_.size(), capacity_,      high_watermark_, pushed_, popped_,
+                             dropped_,      push_timeouts_, pop_timeouts_,   closed_};
     }
 
-private:
-    const std::size_t capacity_;  // 构造后不变的元素数量上限。
-    const OverflowPolicy policy_; // 构造后不变的满队列处理方式。
-    mutable std::mutex mutex_;    // 保护队列、关闭状态和全部统计字段。
-    std::condition_variable not_empty_; // 消费者等待“有数据或关闭”。
-    std::condition_variable not_full_;  // 生产者等待“有空位或关闭”。
-    std::deque<T> items_;         // 实际 FIFO 元素容器。
-    bool closed_{false};          // true 后拒绝任何新 Push。
-    bool aborted_{false};         // true 表示不再 Drain 存量。
-    std::size_t high_watermark_{0}; // 历史最大占用。
-    std::uint64_t pushed_{0};       // 成功入队总数。
-    std::uint64_t popped_{0};       // 成功出队总数。
-    std::uint64_t dropped_{0};      // 丢弃总数。
-    std::uint64_t push_timeouts_{0}; // Push 超时总数。
-    std::uint64_t pop_timeouts_{0};  // Pop 超时总数。
+   private:
+    const std::size_t capacity_;         // 构造后不变的元素数量上限。
+    const OverflowPolicy policy_;        // 构造后不变的满队列处理方式。
+    mutable std::mutex mutex_;           // 保护队列、关闭状态和全部统计字段。
+    std::condition_variable not_empty_;  // 消费者等待“有数据或关闭”。
+    std::condition_variable not_full_;   // 生产者等待“有空位或关闭”。
+    std::deque<T> items_;                // 实际 FIFO 元素容器。
+    bool closed_{false};                 // true 后拒绝任何新 Push。
+    bool aborted_{false};                // true 表示不再 Drain 存量。
+    std::size_t high_watermark_{0};      // 历史最大占用。
+    std::uint64_t pushed_{0};            // 成功入队总数。
+    std::uint64_t popped_{0};            // 成功出队总数。
+    std::uint64_t dropped_{0};           // 丢弃总数。
+    std::uint64_t push_timeouts_{0};     // Push 超时总数。
+    std::uint64_t pop_timeouts_{0};      // Pop 超时总数。
 };
 
 /// 把溢出策略转换成配置和日志使用的文本。

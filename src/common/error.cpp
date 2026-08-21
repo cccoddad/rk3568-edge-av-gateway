@@ -47,9 +47,8 @@ const char* ToString(ErrorCategory category) noexcept {
 std::string DescribeError(const Error& error) {
     std::ostringstream stream;  // 临时文本构造器，用于避免多次字符串拼接。
     stream << error.module << '.' << error.operation << ": " << error.message
-           << " [category=" << ToString(error.category) << ", native_code="
-           << error.native_code << ", retryable=" << (error.retryable ? "true" : "false")
-           << ']';
+           << " [category=" << ToString(error.category) << ", native_code=" << error.native_code
+           << ", retryable=" << (error.retryable ? "true" : "false") << ']';
     return stream.str();
 }
 

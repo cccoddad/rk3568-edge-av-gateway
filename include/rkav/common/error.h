@@ -27,11 +27,11 @@ enum class ErrorCategory {
 
 struct Error {
     ErrorCategory category{ErrorCategory::kInternal};  // 跨平台错误大类。
-    int native_code{0};      // errno、ALSA 或 SDK 原始错误码；Mock 通常为 0。
-    std::string module;      // 产生错误的模块，例如 mock_audio。
-    std::string operation;   // 失败操作，例如 open、read、encode。
-    std::string message;     // 面向开发者的具体原因。
-    bool retryable{false};   // true 表示可退避重试，不表示必定恢复。
+    int native_code{0};     // errno、ALSA 或 SDK 原始错误码；Mock 通常为 0。
+    std::string module;     // 产生错误的模块，例如 mock_audio。
+    std::string operation;  // 失败操作，例如 open、read、encode。
+    std::string message;    // 面向开发者的具体原因。
+    bool retryable{false};  // true 表示可退避重试，不表示必定恢复。
 };
 
 /// 将错误分类转换成稳定字符串，供日志和测试使用。

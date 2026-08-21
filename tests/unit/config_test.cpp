@@ -1,8 +1,8 @@
 // 文件作用：验证 JSON 默认值、未知字段拒绝、范围限制和跨字段语义约束。
 // 主要知识点：配置负向测试、错误路径定位和“解析成功不等于配置可运行”。
-#include <gtest/gtest.h>
-
 #include "rkav/config/config.h"
+
+#include <gtest/gtest.h>
 
 namespace rkav {
 namespace {

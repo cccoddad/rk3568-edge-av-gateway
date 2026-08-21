@@ -17,18 +17,18 @@
 
 namespace {
 
-volatile std::sig_atomic_t g_signal_requested = 0; // 0=未收到信号，1=请求安全停止。
+volatile std::sig_atomic_t g_signal_requested = 0;  // 0=未收到信号，1=请求安全停止。
 
 /// 功能：异步信号安全地记录停止意图；参数中的具体信号值当前无需区分。
 // 信号处理函数中只能修改 sig_atomic_t，日志、加锁和停止线程都交给控制线程执行。
 void HandleSignal(int) { g_signal_requested = 1; }
 
 struct CommandLine {
-    std::string config_path{"config/mock.json"}; // JSON 配置文件路径。
-    std::optional<int> duration_seconds; // CLI 运行秒数覆盖值；未设置则使用 JSON。
-    bool validate_only{false};  // 只校验配置，不启动任何 worker。
-    bool show_help{false};      // 输出帮助后退出。
-    bool show_version{false};   // 输出版本后退出。
+    std::string config_path{"config/mock.json"};  // JSON 配置文件路径。
+    std::optional<int> duration_seconds;  // CLI 运行秒数覆盖值；未设置则使用 JSON。
+    bool validate_only{false};            // 只校验配置，不启动任何 worker。
+    bool show_help{false};                // 输出帮助后退出。
+    bool show_version{false};             // 输出版本后退出。
 };
 
 /// 功能：把可用参数和含义打印到标准输出。
@@ -67,8 +67,8 @@ rkav::Result<CommandLine> ParseArguments(int argc, char* argv[]) {
                     rkav::Error{rkav::ErrorCategory::kInvalidConfig, 0, "cli", "parse",
                                 "--duration requires a non-negative integer", false});
             }
-            const std::string text = argv[++index]; // --duration 后的原始文本。
-            int duration = -1; // 解析后的秒数；-1 用来检测未正确赋值。
+            const std::string text = argv[++index];  // --duration 后的原始文本。
+            int duration = -1;  // 解析后的秒数；-1 用来检测未正确赋值。
             // from_chars 不受本地化环境影响，并能严格拒绝夹杂其他字符的数值。
             const auto [end, error] =
                 std::from_chars(text.data(), text.data() + text.size(), duration);
@@ -98,7 +98,7 @@ int main(int argc, char* argv[]) {
             std::cerr << rkav::DescribeError(parsed.error()) << '\n';
             return 2;
         }
-        const CommandLine command = std::move(parsed).value(); // 后续只读的命令行配置。
+        const CommandLine command = std::move(parsed).value();  // 后续只读的命令行配置。
         if (command.show_help) {
             PrintHelp();
             return 0;
@@ -108,12 +108,12 @@ int main(int argc, char* argv[]) {
             return 0;
         }
 
-        auto loaded = rkav::ConfigLoader::LoadFromFile(command.config_path); // 文件加载结果。
+        auto loaded = rkav::ConfigLoader::LoadFromFile(command.config_path);  // 文件加载结果。
         if (!loaded) {
             std::cerr << rkav::DescribeError(loaded.error()) << '\n';
             return 2;
         }
-        rkav::AppConfig config = std::move(loaded).value(); // 本次运行的强类型配置。
+        rkav::AppConfig config = std::move(loaded).value();  // 本次运行的强类型配置。
         if (command.duration_seconds.has_value()) {
             config.runtime.run_duration_seconds = *command.duration_seconds;
         }
@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
             return 0;
         }
 
-        rkav::LogLevel log_level = rkav::LogLevel::kInfo; // 配置文本对应的枚举值。
+        rkav::LogLevel log_level = rkav::LogLevel::kInfo;  // 配置文本对应的枚举值。
         if (!rkav::ParseLogLevel(config.runtime.log_level, log_level)) {
             std::cerr << "config.runtime.log_level: unsupported level\n";
             return 2;
@@ -141,31 +141,30 @@ int main(int argc, char* argv[]) {
         std::signal(SIGINT, HandleSignal);
         std::signal(SIGTERM, HandleSignal);
 
-        rkav::Application application(config); // 管道及全部 worker 的唯一所有者。
-        auto started = application.Start();    // 启动结果。
+        rkav::Application application(config);  // 管道及全部 worker 的唯一所有者。
+        auto started = application.Start();     // 启动结果。
         if (!started) {
             std::cerr << rkav::DescribeError(started.error()) << '\n';
             return 1;
         }
 
         // 控制线程把异步信号和运行时长转换成普通的线程安全停止请求。
-        std::jthread controller([&application, duration = config.runtime.run_duration_seconds](
-                                    std::stop_token stop) {
-            const auto started_at = std::chrono::steady_clock::now(); // 自动停止计时起点。
-            while (!stop.stop_requested() && !application.stop_requested()) {
-                if (g_signal_requested != 0) {
-                    application.RequestStop("signal");
-                    break;
+        std::jthread controller(
+            [&application, duration = config.runtime.run_duration_seconds](std::stop_token stop) {
+                const auto started_at = std::chrono::steady_clock::now();  // 自动停止计时起点。
+                while (!stop.stop_requested() && !application.stop_requested()) {
+                    if (g_signal_requested != 0) {
+                        application.RequestStop("signal");
+                        break;
+                    }
+                    if (duration > 0 && std::chrono::steady_clock::now() - started_at >=
+                                            std::chrono::seconds(duration)) {
+                        application.RequestStop("run_duration_elapsed");
+                        break;
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(20));
                 }
-                if (duration > 0 &&
-                    std::chrono::steady_clock::now() - started_at >=
-                        std::chrono::seconds(duration)) {
-                    application.RequestStop("run_duration_elapsed");
-                    break;
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            }
-        });
+            });
 
         auto completed = application.Wait();  // 最终运行/停止结果。
         controller.request_stop();

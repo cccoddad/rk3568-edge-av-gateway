@@ -11,14 +11,14 @@
 namespace rkav {
 
 struct VideoCapabilities {
-    int width{0};       // 实际输出宽度，单位像素。
-    int height{0};      // 实际输出高度，单位像素。
-    int fps{0};         // 每秒帧数。
+    int width{0};                               // 实际输出宽度，单位像素。
+    int height{0};                              // 实际输出高度，单位像素。
+    int fps{0};                                 // 每秒帧数。
     PixelFormat format{PixelFormat::kUnknown};  // 实际像素格式。
 };
 
 class IVideoCapture {
-public:
+   public:
     /// 功能：通过基类指针销毁具体采集后端，确保派生类资源被完整释放。
     virtual ~IVideoCapture() = default;
     /// 功能：使用 config 打开视频源，并返回驱动最终协商出的实际参数。

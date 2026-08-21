@@ -8,11 +8,10 @@
 #include <cstdint>
 #include <map>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
-
-#include <nlohmann/json.hpp>
 
 #include "rkav/common/types.h"
 #include "rkav/queue/bounded_queue.h"
@@ -37,7 +36,7 @@ enum class MetricCounter {
 enum class WorkerState { kStarting, kRunning, kDegraded, kStopping, kStopped, kFailed };
 
 class MetricsRegistry {
-public:
+   public:
     /// 创建指标仓库；latency_window 是每个阶段最多保留的延迟样本数。
     explicit MetricsRegistry(std::size_t latency_window = 4096);
 
@@ -52,20 +51,19 @@ public:
     /// 返回包含计数、p50/p95/p99 和队列状态的 JSON 快照。
     [[nodiscard]] nlohmann::json Snapshot() const;
 
-private:
-    static constexpr std::size_t kCounterCount =
-        static_cast<std::size_t>(MetricCounter::kCount);
+   private:
+    static constexpr std::size_t kCounterCount = static_cast<std::size_t>(MetricCounter::kCount);
 
     // 高频计数使用原子变量；需要成组更新的延迟窗口和队列快照使用同一把锁。
     std::array<std::atomic<std::uint64_t>, kCounterCount> counters_{};
     const std::size_t latency_window_;  // 每个阶段的最大延迟样本数。
     mutable std::mutex mutex_;          // 保护下面两个容器。
-    std::map<std::string, std::vector<TimestampUs>> latencies_; // 阶段名到微秒样本。
+    std::map<std::string, std::vector<TimestampUs>> latencies_;  // 阶段名到微秒样本。
     std::map<std::string, QueueSnapshot> queues_;                // 队列名到最近快照。
 };
 
 class WorkerHealth {
-public:
+   public:
     /// 标记 worker 已启动，并把当前时间视为初始进展时间。
     void MarkStarted(TimestampUs now_us) noexcept;
     /// 标记成功处理一个数据单元，并清零连续错误数。
@@ -80,11 +78,11 @@ public:
     [[nodiscard]] std::uint64_t consecutive_errors() const noexcept;
     [[nodiscard]] WorkerState state() const noexcept;
 
-private:
-    std::atomic<TimestampUs> last_progress_us_{0}; // 最近成功处理数据的微秒时刻。
-    std::atomic<TimestampUs> last_error_us_{0};    // 最近发生错误的微秒时刻。
-    std::atomic<std::uint64_t> consecutive_errors_{0}; // 自上次成功以来的错误数。
-    std::atomic<WorkerState> state_{WorkerState::kStopped}; // 当前生命周期状态。
+   private:
+    std::atomic<TimestampUs> last_progress_us_{0};  // 最近成功处理数据的微秒时刻。
+    std::atomic<TimestampUs> last_error_us_{0};     // 最近发生错误的微秒时刻。
+    std::atomic<std::uint64_t> consecutive_errors_{0};       // 自上次成功以来的错误数。
+    std::atomic<WorkerState> state_{WorkerState::kStopped};  // 当前生命周期状态。
 };
 
 /// 把 WorkerState 转换成稳定文本。

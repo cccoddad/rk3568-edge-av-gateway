@@ -12,10 +12,10 @@ namespace rkav {
 
 struct PacketRouter::SinkWorker {
     // 每个输出独占线程和有界队列，单个慢输出不会阻塞编码线程或其他输出。
-    OutputConfig config;  // 当前输出的独立配置。
+    OutputConfig config;                // 当前输出的独立配置。
     std::unique_ptr<IPacketSink> sink;  // 具体输出实现的唯一所有权。
-    std::unique_ptr<BoundedQueue<std::shared_ptr<const EncodedPacket>>> queue; // 包队列。
-    std::jthread thread;   // 唯一调用该 Sink::Write 的消费线程。
+    std::unique_ptr<BoundedQueue<std::shared_ptr<const EncodedPacket>>> queue;  // 包队列。
+    std::jthread thread;  // 唯一调用该 Sink::Write 的消费线程。
     WorkerHealth health;  // 输出线程的进展和错误状态。
 };
 
@@ -27,8 +27,7 @@ PacketRouter::PacketRouter(std::shared_ptr<IClock> clock, MetricsRegistry& metri
 PacketRouter::~PacketRouter() { Stop(CloseMode::kAbort); }
 
 /// 功能：启动前打开一个 Sink 并为其创建独立有界队列。
-Result<void> PacketRouter::AddSink(const OutputConfig& config,
-                                   std::unique_ptr<IPacketSink> sink) {
+Result<void> PacketRouter::AddSink(const OutputConfig& config, std::unique_ptr<IPacketSink> sink) {
     if (started_.load(std::memory_order_acquire)) {
         return Result<void>::Failure(Error{ErrorCategory::kInvalidState, 0, "packet_router",
                                            "add_sink", "router is already running", false});
@@ -67,7 +66,7 @@ Result<void> PacketRouter::Start() {
             target->health.MarkStarted(clock_->NowUs());
             while (!stop.stop_requested()) {
                 auto popped =
-                    target->queue->Pop(stop, std::chrono::milliseconds(250)); // 本次取包结果。
+                    target->queue->Pop(stop, std::chrono::milliseconds(250));  // 本次取包结果。
                 if (popped.status == QueueStatus::kTimeout) {
                     continue;
                 }
@@ -78,9 +77,9 @@ Result<void> PacketRouter::Start() {
                 if (!result) {
                     metrics_.Increment(MetricCounter::kErrors);
                     target->health.MarkError(clock_->NowUs());
-                    Logger::Instance().Log(
-                        LogLevel::kError, "packet_router", "sink_write_failed",
-                        DescribeError(result.error()), {{"sink", target->sink->name()}});
+                    Logger::Instance().Log(LogLevel::kError, "packet_router", "sink_write_failed",
+                                           DescribeError(result.error()),
+                                           {{"sink", target->sink->name()}});
                     if (target->config.required) {
                         {
                             std::scoped_lock lock(error_mutex_);

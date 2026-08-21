@@ -1,11 +1,11 @@
 // 文件作用：以小分辨率真实时间运行完整 Application，验证线程、背压、故障和停止。
 // 主要知识点：集成测试、真实并发、有界等待、故障注入和最终指标对账。
-#include <chrono>
-#include <thread>
+#include "rkav/app/application.h"
 
 #include <gtest/gtest.h>
 
-#include "rkav/app/application.h"
+#include <chrono>
+#include <thread>
 
 namespace rkav {
 namespace {
@@ -35,7 +35,7 @@ AppConfig SmallRealtimeConfig() {
 
 /// 功能：在有限时间内轮询停止标志，防止错误场景测试永久挂死。
 bool WaitForStop(Application& app, std::chrono::milliseconds timeout) {
-    const auto deadline = std::chrono::steady_clock::now() + timeout; // 最晚等待时刻。
+    const auto deadline = std::chrono::steady_clock::now() + timeout;  // 最晚等待时刻。
     while (!app.stop_requested() && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(5ms);
     }

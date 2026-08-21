@@ -11,14 +11,14 @@
 namespace rkav {
 
 struct AudioCapabilities {
-    int sample_rate{0};       // 设备最终采用的每秒采样点数。
-    int channels{0};          // 声道数，1 为单声道、2 为双声道。
-    int samples_per_frame{0}; // 每次 Read 返回的每声道样本数。
+    int sample_rate{0};                         // 设备最终采用的每秒采样点数。
+    int channels{0};                            // 声道数，1 为单声道、2 为双声道。
+    int samples_per_frame{0};                   // 每次 Read 返回的每声道样本数。
     SampleFormat format{SampleFormat::kS16LE};  // 单个样本的存储格式。
 };
 
 class IAudioCapture {
-public:
+   public:
     /// 功能：通过基类指针销毁具体音频后端，确保派生类资源被完整释放。
     virtual ~IAudioCapture() = default;
     /// 功能：使用 config 打开音频设备，并返回驱动最终协商出的 PCM 参数。

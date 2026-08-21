@@ -22,75 +22,75 @@ struct RuntimeConfig {
 
 struct VideoFailureConfig {
     // 从指定读取次数开始连续注入失败，用于稳定复现设备断开场景。
-    std::optional<std::uint64_t> fail_after_frames; // 从第几次 Read 开始失败。
-    std::uint64_t fail_for_frames{0};               // 连续失败多少次。
-    int read_delay_ms{0};                           // 额外读取延迟，单位毫秒。
+    std::optional<std::uint64_t> fail_after_frames;  // 从第几次 Read 开始失败。
+    std::uint64_t fail_for_frames{0};                // 连续失败多少次。
+    int read_delay_ms{0};                            // 额外读取延迟，单位毫秒。
 };
 
 struct VideoConfig {
-    std::string backend{"mock"}; // 视频后端名称。
-    int width{1280};   // 帧宽，单位像素。
-    int height{720};   // 帧高，单位像素。
-    int fps{30};       // 目标帧率。
-    PixelFormat format{PixelFormat::kRgb888}; // 期望像素格式。
-    std::size_t queue_capacity{4};  // 视频编码队列最多容纳的帧数。
-    OverflowPolicy overflow_policy{OverflowPolicy::kDropOldest}; // 满队列处理方式。
-    std::string pattern{"moving_box"}; // Mock 测试图样式。
-    bool realtime{true};  // false 时不等待真实节拍，主要供单元测试使用。
-    VideoFailureConfig failure; // 视频故障注入参数。
+    std::string backend{"mock"};               // 视频后端名称。
+    int width{1280};                           // 帧宽，单位像素。
+    int height{720};                           // 帧高，单位像素。
+    int fps{30};                               // 目标帧率。
+    PixelFormat format{PixelFormat::kRgb888};  // 期望像素格式。
+    std::size_t queue_capacity{4};             // 视频编码队列最多容纳的帧数。
+    OverflowPolicy overflow_policy{OverflowPolicy::kDropOldest};  // 满队列处理方式。
+    std::string pattern{"moving_box"};                            // Mock 测试图样式。
+    bool realtime{true};         // false 时不等待真实节拍，主要供单元测试使用。
+    VideoFailureConfig failure;  // 视频故障注入参数。
 };
 
 struct AudioFailureConfig {
     // XRUN 是可恢复故障；disconnect_after_blocks 模拟持续失联。
-    std::optional<std::uint64_t> xrun_every_blocks;       // 每 N 块注入一次 XRUN。
-    std::optional<std::uint64_t> disconnect_after_blocks; // 从第 N 块起持续失联。
+    std::optional<std::uint64_t> xrun_every_blocks;        // 每 N 块注入一次 XRUN。
+    std::optional<std::uint64_t> disconnect_after_blocks;  // 从第 N 块起持续失联。
 };
 
 struct AudioConfig {
-    std::string backend{"mock"}; // 音频后端名称。
-    int sample_rate{48000};  // 每秒每声道采样点数，单位 Hz。
-    int channels{1};         // 声道数。
-    SampleFormat format{SampleFormat::kS16LE}; // PCM 样本格式。
-    int frame_duration_ms{20}; // 每个 AudioFrame 覆盖的时长。
-    int queue_capacity_ms{300}; // 音频队列可缓存的总时长。
-    std::string signal{"sine"}; // Mock 信号类型：sine 或 silence。
-    double frequency_hz{1000.0}; // 正弦波频率。
-    double amplitude{0.25};      // 归一化幅度，范围 0.0 到 1.0。
-    bool realtime{true};       // 是否按真实音频节拍等待。
-    AudioFailureConfig failure; // 音频故障注入参数。
+    std::string backend{"mock"};                // 音频后端名称。
+    int sample_rate{48000};                     // 每秒每声道采样点数，单位 Hz。
+    int channels{1};                            // 声道数。
+    SampleFormat format{SampleFormat::kS16LE};  // PCM 样本格式。
+    int frame_duration_ms{20};                  // 每个 AudioFrame 覆盖的时长。
+    int queue_capacity_ms{300};                 // 音频队列可缓存的总时长。
+    std::string signal{"sine"};                 // Mock 信号类型：sine 或 silence。
+    double frequency_hz{1000.0};                // 正弦波频率。
+    double amplitude{0.25};                     // 归一化幅度，范围 0.0 到 1.0。
+    bool realtime{true};                        // 是否按真实音频节拍等待。
+    AudioFailureConfig failure;                 // 音频故障注入参数。
 };
 
 struct InferenceConfig {
-    std::string backend{"mock"}; // 推理后端名称。
-    std::string mode{"synthetic_target"}; // Mock 结果生成模式。
-    int input_width{320};    // 模型输入宽度。
-    int input_height{320};   // 模型输入高度。
-    int latency_ms{20};      // Mock 单次推理延迟。
-    std::size_t queue_capacity{1}; // 等待推理的视频帧数上限。
-    OverflowPolicy overflow_policy{OverflowPolicy::kKeepLatest}; // 推理积压处理方式。
-    int max_result_age_ms{200}; // 检测结果超过该年龄视为过期。
+    std::string backend{"mock"};           // 推理后端名称。
+    std::string mode{"synthetic_target"};  // Mock 结果生成模式。
+    int input_width{320};                  // 模型输入宽度。
+    int input_height{320};                 // 模型输入高度。
+    int latency_ms{20};                    // Mock 单次推理延迟。
+    std::size_t queue_capacity{1};         // 等待推理的视频帧数上限。
+    OverflowPolicy overflow_policy{OverflowPolicy::kKeepLatest};  // 推理积压处理方式。
+    int max_result_age_ms{200};  // 检测结果超过该年龄视为过期。
 };
 
 struct VideoEncoderConfig {
-    std::string backend{"checksum"}; // 视频编码后端名称。
-    int mock_keyframe_interval{30}; // 每隔多少视频帧标记一个关键帧。
+    std::string backend{"checksum"};  // 视频编码后端名称。
+    int mock_keyframe_interval{30};   // 每隔多少视频帧标记一个关键帧。
 };
 
 struct AudioEncoderConfig {
-    std::string backend{"checksum"}; // 音频编码后端名称。
+    std::string backend{"checksum"};  // 音频编码后端名称。
 };
 
 struct OutputConfig {
-    std::string type{"null"}; // 输出类型：null 或 jsonl。
+    std::string type{"null"};  // 输出类型：null 或 jsonl。
     bool enabled{true};        // false 时完全跳过该输出。
     // 必需输出失败会停止整个应用；非必需输出失败时只隔离该输出。
     bool required{true};
-    bool validate_timestamps{true}; // 是否检查每路 DTS 不倒退。
-    std::string path;               // JSONL 等文件输出路径。
-    std::size_t queue_capacity{16}; // 此输出独立队列的包数量上限。
-    OverflowPolicy overflow_policy{OverflowPolicy::kDropOldest}; // 满队列处理方式。
-    int write_delay_ms{0};          // 每包人工写入延迟，用于模拟慢输出。
-    std::optional<std::uint64_t> fail_after_packets; // 写入 N 包后注入故障。
+    bool validate_timestamps{true};  // 是否检查每路 DTS 不倒退。
+    std::string path;                // JSONL 等文件输出路径。
+    std::size_t queue_capacity{16};  // 此输出独立队列的包数量上限。
+    OverflowPolicy overflow_policy{OverflowPolicy::kDropOldest};  // 满队列处理方式。
+    int write_delay_ms{0};  // 每包人工写入延迟，用于模拟慢输出。
+    std::optional<std::uint64_t> fail_after_packets;  // 写入 N 包后注入故障。
 };
 
 struct MonitoringConfig {
@@ -100,19 +100,19 @@ struct MonitoringConfig {
 };
 
 struct AppConfig {
-    int schema_version{1};                // 配置结构版本，当前只支持 1。
-    RuntimeConfig runtime;                // 进程级运行参数。
-    VideoConfig video;                    // 视频采集参数。
-    AudioConfig audio;                    // 音频采集参数。
-    InferenceConfig inference;            // 推理参数。
-    VideoEncoderConfig video_encoder;     // 视频编码参数。
-    AudioEncoderConfig audio_encoder;     // 音频编码参数。
-    std::vector<OutputConfig> outputs;    // 一个或多个独立输出。
-    MonitoringConfig monitoring;          // 指标和健康检查参数。
+    int schema_version{1};              // 配置结构版本，当前只支持 1。
+    RuntimeConfig runtime;              // 进程级运行参数。
+    VideoConfig video;                  // 视频采集参数。
+    AudioConfig audio;                  // 音频采集参数。
+    InferenceConfig inference;          // 推理参数。
+    VideoEncoderConfig video_encoder;   // 视频编码参数。
+    AudioEncoderConfig audio_encoder;   // 音频编码参数。
+    std::vector<OutputConfig> outputs;  // 一个或多个独立输出。
+    MonitoringConfig monitoring;        // 指标和健康检查参数。
 };
 
 class ConfigLoader {
-public:
+   public:
     /// 从文件读取 JSON，随后执行 Parse 和 Validate。
     static Result<AppConfig> LoadFromFile(const std::string& path);
     /// 把 JSON 文本转换为强类型配置；未知字段不会被静默忽略。

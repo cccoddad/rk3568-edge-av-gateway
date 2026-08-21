@@ -12,7 +12,7 @@
 namespace rkav {
 
 class MockAudioCapture final : public IAudioCapture {
-public:
+   public:
     /// 注入统一时钟；测试可传 ManualClock，运行时通常传 SteadyClock。
     explicit MockAudioCapture(std::shared_ptr<IClock> clock);
 
@@ -25,14 +25,14 @@ public:
     /// 退出已打开状态；允许重复调用。
     void Close() noexcept override;
 
-private:
+   private:
     std::shared_ptr<IClock> clock_;  // 与视频、推理共享的单调时钟。
-    std::mutex mutex_;              // 保护以下可变状态，避免 Read 与 Close 数据竞争。
-    AudioConfig config_;            // Open 成功后生效的配置快照。
-    TimestampUs start_us_{0};        // 第 0 个音频块的 PTS，单位微秒。
-    std::uint64_t block_sequence_{0}; // 下一次成功块的序号。
-    std::uint64_t sample_index_{0};   // 下一块首样本在整条波形中的绝对索引。
-    std::optional<std::uint64_t> last_injected_xrun_sequence_; // 防止同一块重复 XRUN。
+    std::mutex mutex_;         // 保护以下可变状态，避免 Read 与 Close 数据竞争。
+    AudioConfig config_;       // Open 成功后生效的配置快照。
+    TimestampUs start_us_{0};  // 第 0 个音频块的 PTS，单位微秒。
+    std::uint64_t block_sequence_{0};  // 下一次成功块的序号。
+    std::uint64_t sample_index_{0};    // 下一块首样本在整条波形中的绝对索引。
+    std::optional<std::uint64_t> last_injected_xrun_sequence_;  // 防止同一块重复 XRUN。
     bool open_{false};  // 简单状态机：false=关闭，true=允许 Read/Recover。
 };
 

@@ -13,7 +13,7 @@ namespace rkav {
 
 template <typename T>
 class Result {
-public:
+   public:
     /// 功能：构造持有成功值的 Result。
     static Result Success(T value) { return Result(std::move(value)); }
     /// 功能：构造持有结构化错误的 Result。
@@ -64,7 +64,7 @@ public:
         return std::get<Error>(value_);
     }
 
-private:
+   private:
     /// 功能：仅供 Success 工厂使用的成功值构造函数。
     explicit Result(T value) : value_(std::move(value)) {}
     /// 功能：仅供 Failure 工厂使用的错误构造函数。
@@ -75,7 +75,7 @@ private:
 
 template <>
 class Result<void> {
-public:
+   public:
     /// 功能：构造不含错误的 void 成功结果。
     static Result Success() { return Result(); }
     /// 功能：构造包含 Error 的 void 失败结果。
@@ -102,7 +102,7 @@ public:
         return *error_;
     }
 
-private:
+   private:
     /// 功能：仅供 Success 使用的默认成功构造函数。
     Result() = default;
     /// 功能：仅供 Failure 使用的错误构造函数。

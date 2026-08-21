@@ -11,8 +11,7 @@ namespace {
 
 /// 功能：构造 types 模块统一使用的不可重试校验错误。
 Error ValidationError(std::string message) {
-    return Error{ErrorCategory::kInvalidConfig, 0, "types", "validate", std::move(message),
-                 false};
+    return Error{ErrorCategory::kInvalidConfig, 0, "types", "validate", std::move(message), false};
 }
 
 /// 功能：根据像素格式、stride 和高度计算一帧至少需要多少字节。
@@ -136,9 +135,8 @@ Result<void> ValidateAudioFrame(const AudioFrame& frame) {
     }
     const std::size_t bytes_per_sample =
         frame.format == SampleFormat::kS16LE ? 2U : 4U;  // 单个声道样本字节数。
-    const auto samples =
-        static_cast<std::size_t>(frame.samples_per_channel);  // 每声道样本数。
-    const auto channels = static_cast<std::size_t>(frame.channels);  // 声道数量。
+    const auto samples = static_cast<std::size_t>(frame.samples_per_channel);  // 每声道样本数。
+    const auto channels = static_cast<std::size_t>(frame.channels);            // 声道数量。
     if (samples > std::numeric_limits<std::size_t>::max() / channels ||
         samples * channels > std::numeric_limits<std::size_t>::max() / bytes_per_sample) {
         return Result<void>::Failure(ValidationError("audio size calculation overflow"));

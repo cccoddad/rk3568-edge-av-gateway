@@ -16,7 +16,7 @@ RectF SyntheticBoxForFrame(std::uint64_t sequence, int width, int height);
 Result<void> GenerateRgbTestPattern(std::uint64_t sequence, VideoFrame& frame);
 
 class MockVideoCapture final : public IVideoCapture {
-public:
+   public:
     /// 注入统一时钟；测试时可替换为 ManualClock。
     explicit MockVideoCapture(std::shared_ptr<IClock> clock);
 
@@ -27,10 +27,10 @@ public:
     /// 标记采集器关闭；之后 Read 会返回状态错误。
     void Close() noexcept override;
 
-private:
+   private:
     std::shared_ptr<IClock> clock_;  // 与音频和推理共用的时间源。
-    std::mutex mutex_;              // 保护 Open/Read/Close 共享状态。
-    VideoConfig config_;            // 已生效的视频配置快照。
+    std::mutex mutex_;               // 保护 Open/Read/Close 共享状态。
+    VideoConfig config_;             // 已生效的视频配置快照。
     TimestampUs start_us_{0};        // 第 0 帧绝对 PTS，单位微秒。
     std::uint64_t attempt_{0};       // Read 尝试次数，也用于确定故障注入位置。
     bool open_{false};               // 当前是否允许读取。

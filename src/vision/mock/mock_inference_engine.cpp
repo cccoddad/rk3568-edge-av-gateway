@@ -29,13 +29,11 @@ Result<ModelInfo> MockInferenceEngine::Open(const InferenceConfig& config) {
     }
     config_ = config;
     open_ = true;
-    return Result<ModelInfo>::Success(
-        ModelInfo{config.input_width, config.input_height, "mock"});
+    return Result<ModelInfo>::Success(ModelInfo{config.input_width, config.input_height, "mock"});
 }
 
 /// 功能：校验输入帧、模拟推理耗时，并生成与来源帧严格绑定的检测结果。
-Result<DetectionBatch> MockInferenceEngine::Infer(const VideoFrame& frame,
-                                                   std::stop_token stop) {
+Result<DetectionBatch> MockInferenceEngine::Infer(const VideoFrame& frame, std::stop_token stop) {
     InferenceConfig config;  // 本次推理使用的配置快照，离开锁后保持不变。
     {
         // 只在读取状态时持锁，模拟耗时阶段不阻塞 Close 获取 mutex_。
@@ -66,8 +64,8 @@ Result<DetectionBatch> MockInferenceEngine::Infer(const VideoFrame& frame,
     batch.frame_sequence = frame.sequence;
     batch.source_pts_us = frame.pts_us;
     batch.completed_at_us = clock_->NowUs();
-    batch.items.push_back(Detection{0, 0.95F,
-                                    SyntheticBoxForFrame(frame.sequence, frame.width, frame.height)});
+    batch.items.push_back(
+        Detection{0, 0.95F, SyntheticBoxForFrame(frame.sequence, frame.width, frame.height)});
     return Result<DetectionBatch>::Success(std::move(batch));
 }
 

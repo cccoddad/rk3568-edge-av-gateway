@@ -20,14 +20,13 @@ namespace {
 /// 功能：构造 application 模块统一错误。
 Error AppError(ErrorCategory category, std::string_view operation, std::string message,
                bool retryable = false) {
-    return Error{category, 0, "application", std::string(operation), std::move(message),
-                 retryable};
+    return Error{category, 0, "application", std::string(operation), std::move(message), retryable};
 }
 
 /// 功能：把 worker 错误统一写为结构化日志，并带上 worker 名称。
 void LogWorkerError(std::string_view worker, const Error& error) {
-    Logger::Instance().Log(LogLevel::kError, "application", "worker_error",
-                           DescribeError(error), {{"worker", std::string(worker)}});
+    Logger::Instance().Log(LogLevel::kError, "application", "worker_error", DescribeError(error),
+                           {{"worker", std::string(worker)}});
 }
 
 /// 功能：可取消地等待固定退避时间；停止请求到达时返回 false。
@@ -54,7 +53,7 @@ Application::~Application() {
 /// 功能：按后端、Router、worker 顺序启动；任何阶段失败都会回滚。
 Result<void> Application::Start() {
     // CAS 保证生命周期只能从 Created 进入 Initializing，拒绝重复启动。
-    ApplicationState expected = ApplicationState::kCreated; // CAS 期望的唯一合法前置状态。
+    ApplicationState expected = ApplicationState::kCreated;  // CAS 期望的唯一合法前置状态。
     if (!state_.compare_exchange_strong(expected, ApplicationState::kInitializing,
                                         std::memory_order_acq_rel)) {
         return Result<void>::Failure(
@@ -62,7 +61,7 @@ Result<void> Application::Start() {
     }
 
     // 按依赖顺序启动；任一步失败都立即反向关闭已经创建的资源。
-    auto result = CreateAndOpenBackends(); // 当前启动阶段的结果，后续复用该变量。
+    auto result = CreateAndOpenBackends();  // 当前启动阶段的结果，后续复用该变量。
     if (!result) {
         state_.store(ApplicationState::kFailed, std::memory_order_release);
         StopWorkers(CloseMode::kAbort);
@@ -90,7 +89,7 @@ Result<void> Application::Start() {
 /// 功能：原子地记录第一次停止请求，并唤醒主线程 Wait。
 void Application::RequestStop(std::string reason) noexcept {
     // 只接受第一个停止原因，使多线程同时报错时仍能保留最初根因。
-    bool expected = false; // CAS 只允许第一个调用者从 false 改为 true。
+    bool expected = false;  // CAS 只允许第一个调用者从 false 改为 true。
     if (stop_requested_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
         {
             std::scoped_lock lock(status_mutex_);
@@ -109,7 +108,7 @@ Result<void> Application::Wait() {
     }
     // 正常退出排空数据；致命错误优先快速终止，避免继续传播已不可信的数据。
     const CloseMode mode =
-        fatal_error().has_value() ? CloseMode::kAbort : CloseMode::kDrain; // 最终关闭模式。
+        fatal_error().has_value() ? CloseMode::kAbort : CloseMode::kDrain;  // 最终关闭模式。
     StopWorkers(mode);
 
     if (auto error = fatal_error(); error.has_value()) {
@@ -160,31 +159,30 @@ Result<void> Application::CreateAndOpenBackends() {
         audio_encoder_ = std::make_unique<ChecksumAudioEncoder>();
     }
 #endif
-    if (!video_capture_ || !audio_capture_ || !inference_ || !video_encoder_ ||
-        !audio_encoder_) {
+    if (!video_capture_ || !audio_capture_ || !inference_ || !video_encoder_ || !audio_encoder_) {
         return Result<void>::Failure(
             AppError(ErrorCategory::kNotSupported, "create_backends",
                      "one or more configured backends are not compiled in"));
     }
 
     // Open 采用正向顺序，失败回滚采用严格反向顺序。
-    auto video_opened = video_capture_->Open(config_.video); // 视频后端打开/协商结果。
+    auto video_opened = video_capture_->Open(config_.video);  // 视频后端打开/协商结果。
     if (!video_opened) {
         return Result<void>::Failure(video_opened.error());
     }
-    auto audio_opened = audio_capture_->Open(config_.audio); // 音频后端打开/协商结果。
+    auto audio_opened = audio_capture_->Open(config_.audio);  // 音频后端打开/协商结果。
     if (!audio_opened) {
         video_capture_->Close();
         return Result<void>::Failure(audio_opened.error());
     }
-    auto model_opened = inference_->Open(config_.inference); // 推理模型初始化结果。
+    auto model_opened = inference_->Open(config_.inference);  // 推理模型初始化结果。
     if (!model_opened) {
         audio_capture_->Close();
         video_capture_->Close();
         return Result<void>::Failure(model_opened.error());
     }
     auto video_encoder_opened =
-        video_encoder_->Open(config_.video_encoder); // 视频编码器初始化结果。
+        video_encoder_->Open(config_.video_encoder);  // 视频编码器初始化结果。
     if (!video_encoder_opened) {
         inference_->Close();
         audio_capture_->Close();
@@ -192,7 +190,7 @@ Result<void> Application::CreateAndOpenBackends() {
         return video_encoder_opened;
     }
     auto audio_encoder_opened =
-        audio_encoder_->Open(config_.audio_encoder); // 音频编码器初始化结果。
+        audio_encoder_->Open(config_.audio_encoder);  // 音频编码器初始化结果。
     if (!audio_encoder_opened) {
         video_encoder_->Close();
         inference_->Close();
@@ -204,13 +202,13 @@ Result<void> Application::CreateAndOpenBackends() {
     // 所有跨线程通道都使用有界队列，容量和溢出行为来自已校验配置。
     inference_queue_ = std::make_unique<BoundedQueue<VideoFrame>>(
         config_.inference.queue_capacity, config_.inference.overflow_policy);
-    video_encode_queue_ = std::make_unique<BoundedQueue<VideoFrame>>(
-        config_.video.queue_capacity, config_.video.overflow_policy);
+    video_encode_queue_ = std::make_unique<BoundedQueue<VideoFrame>>(config_.video.queue_capacity,
+                                                                     config_.video.overflow_policy);
     const std::size_t audio_capacity = static_cast<std::size_t>(
         std::max(1, config_.audio.queue_capacity_ms / config_.audio.frame_duration_ms));
     // 音频不能像视频那样静默丢帧，因此固定采用阻塞生产者策略。
-    audio_encode_queue_ = std::make_unique<BoundedQueue<AudioFrame>>(
-        audio_capacity, OverflowPolicy::kBlockProducer);
+    audio_encode_queue_ =
+        std::make_unique<BoundedQueue<AudioFrame>>(audio_capacity, OverflowPolicy::kBlockProducer);
     return Result<void>::Success();
 }
 
@@ -221,11 +219,11 @@ Result<void> Application::CreateRouter() {
         if (!output.enabled) {
             continue;
         }
-        auto sink = CreatePacketSink(output); // 当前输出配置对应的具体 Sink。
+        auto sink = CreatePacketSink(output);  // 当前输出配置对应的具体 Sink。
         if (!sink) {
             return Result<void>::Failure(sink.error());
         }
-        auto added = router_->AddSink(output, std::move(sink).value()); // 注册结果。
+        auto added = router_->AddSink(output, std::move(sink).value());  // 注册结果。
         if (!added) {
             return added;
         }
@@ -237,8 +235,7 @@ Result<void> Application::CreateRouter() {
 Result<void> Application::StartWorkers() {
     try {
         // 先启动消费者再启动采集者，避免首批数据进入尚无人消费的队列。
-        inference_thread_ =
-            std::jthread([this](std::stop_token stop) { InferenceLoop(stop); });
+        inference_thread_ = std::jthread([this](std::stop_token stop) { InferenceLoop(stop); });
         video_encode_thread_ =
             std::jthread([this](std::stop_token stop) { VideoEncodeLoop(stop); });
         audio_encode_thread_ =
@@ -259,12 +256,12 @@ Result<void> Application::StartWorkers() {
 /// 参数 mode：Drain 用于正常退出，Abort 用于致命错误。
 void Application::StopWorkers(CloseMode mode) noexcept {
     const ApplicationState current =
-        state_.load(std::memory_order_acquire); // 进入停止流程时的状态快照。
+        state_.load(std::memory_order_acquire);  // 进入停止流程时的状态快照。
     if (current == ApplicationState::kStopped || current == ApplicationState::kCreated) {
         return;
     }
     state_.store(ApplicationState::kStopping, std::memory_order_release);
-    const TimestampUs shutdown_started_us = clock_->NowUs(); // 停止计时起点，单位微秒。
+    const TimestampUs shutdown_started_us = clock_->NowUs();  // 停止计时起点，单位微秒。
 
     // 第一阶段：停止数据源，确保不再向处理队列写入新数据。
     monitor_thread_.request_stop();
@@ -327,17 +324,16 @@ void Application::StopWorkers(CloseMode mode) noexcept {
 
     // 在线程全部退出后采集最终快照，此时队列指标不会再变化。
     CollectQueueMetrics();
-    const auto snapshot = metrics_.Snapshot(); // 所有 worker 结束后的最终指标。
-    std::string reason; // 在锁内复制出的第一停止原因。
+    const auto snapshot = metrics_.Snapshot();  // 所有 worker 结束后的最终指标。
+    std::string reason;                         // 在锁内复制出的第一停止原因。
     {
         std::scoped_lock lock(status_mutex_);
         reason = stop_reason_;
     }
     Logger::Instance().Log(LogLevel::kInfo, "application", "application_stopped",
-                           "pipeline stopped",
-                           {{"reason", reason}, {"metrics", snapshot.dump()}});
+                           "pipeline stopped", {{"reason", reason}, {"metrics", snapshot.dump()}});
     const TimestampUs shutdown_elapsed_us =
-        clock_->NowUs() - shutdown_started_us; // 实际关闭耗时，单位微秒。
+        clock_->NowUs() - shutdown_started_us;  // 实际关闭耗时，单位微秒。
     if (shutdown_elapsed_us >
         static_cast<TimestampUs>(config_.runtime.shutdown_timeout_ms) * 1000) {
         Logger::Instance().Log(
@@ -346,8 +342,7 @@ void Application::StopWorkers(CloseMode mode) noexcept {
             {{"elapsed_us", std::to_string(shutdown_elapsed_us)},
              {"configured_timeout_ms", std::to_string(config_.runtime.shutdown_timeout_ms)}});
     }
-    state_.store(fatal_error().has_value() ? ApplicationState::kFailed
-                                           : ApplicationState::kStopped,
+    state_.store(fatal_error().has_value() ? ApplicationState::kFailed : ApplicationState::kStopped,
                  std::memory_order_release);
 }
 
@@ -386,7 +381,7 @@ std::optional<Error> Application::DetectStalledWorker(TimestampUs now_us) const 
         const char* name;
         const WorkerHealth* health;
     };
-    const WorkerEntry workers[]{{"video_capture", &video_capture_health_}, // 被检查的 worker 表。
+    const WorkerEntry workers[]{{"video_capture", &video_capture_health_},  // 被检查的 worker 表。
                                 {"audio_capture", &audio_capture_health_},
                                 {"inference", &inference_health_},
                                 {"video_encode", &video_encode_health_},
@@ -399,12 +394,11 @@ std::optional<Error> Application::DetectStalledWorker(TimestampUs now_us) const 
             continue;
         }
         const TimestampUs last_progress_us =
-            worker.health->last_progress_us(); // 该 worker 最近成功处理数据的微秒时刻。
+            worker.health->last_progress_us();  // 该 worker 最近成功处理数据的微秒时刻。
         if (last_progress_us >= 0 && now_us - last_progress_us > timeout_us) {
             return AppError(ErrorCategory::kTimeout, "health_check",
                             std::string(worker.name) + " made no progress within " +
-                                std::to_string(config_.monitoring.worker_stall_timeout_ms) +
-                                " ms");
+                                std::to_string(config_.monitoring.worker_stall_timeout_ms) + " ms");
         }
     }
     return std::nullopt;
@@ -414,7 +408,7 @@ std::optional<Error> Application::DetectStalledWorker(TimestampUs now_us) const 
 void Application::VideoCaptureLoop(std::stop_token stop) {
     video_capture_health_.MarkStarted(clock_->NowUs());
     while (!stop.stop_requested()) {
-        auto captured = video_capture_->Read(stop); // 本次视频读取结果。
+        auto captured = video_capture_->Read(stop);  // 本次视频读取结果。
         if (!captured) {
             if (captured.error().category == ErrorCategory::kCancelled) {
                 break;
@@ -430,13 +424,13 @@ void Application::VideoCaptureLoop(std::stop_token stop) {
             }
             continue;
         }
-        VideoFrame frame = std::move(captured).value(); // 本次成功读取的视频帧。
+        VideoFrame frame = std::move(captured).value();  // 本次成功读取的视频帧。
         metrics_.Increment(MetricCounter::kVideoCaptured);
         video_capture_health_.MarkProgress(clock_->NowUs());
         // VideoFrame 的 Buffer 使用共享所有权：复制元数据送推理，移动原对象送编码。
-        const auto inference_status = inference_queue_->Push(frame, stop); // 推理分支投递状态。
+        const auto inference_status = inference_queue_->Push(frame, stop);  // 推理分支投递状态。
         const auto encode_status =
-            video_encode_queue_->Push(std::move(frame), stop); // 编码分支投递状态。
+            video_encode_queue_->Push(std::move(frame), stop);  // 编码分支投递状态。
         if (inference_status == QueueStatus::kCancelled ||
             encode_status == QueueStatus::kCancelled || inference_status == QueueStatus::kClosed ||
             encode_status == QueueStatus::kClosed) {
@@ -450,7 +444,7 @@ void Application::VideoCaptureLoop(std::stop_token stop) {
 void Application::AudioCaptureLoop(std::stop_token stop) {
     audio_capture_health_.MarkStarted(clock_->NowUs());
     while (!stop.stop_requested()) {
-        auto captured = audio_capture_->Read(stop); // 本次 PCM 块读取结果。
+        auto captured = audio_capture_->Read(stop);  // 本次 PCM 块读取结果。
         if (!captured) {
             if (captured.error().category == ErrorCategory::kCancelled) {
                 break;
@@ -459,7 +453,7 @@ void Application::AudioCaptureLoop(std::stop_token stop) {
             LogWorkerError("audio_capture", captured.error());
             if (captured.error().category == ErrorCategory::kXrun) {
                 // XRUN 先在采集后端内部恢复；成功后重读同一逻辑音频块。
-                auto recovered = audio_capture_->Recover(); // 采集后端恢复结果。
+                auto recovered = audio_capture_->Recover();  // 采集后端恢复结果。
                 if (recovered) {
                     metrics_.Increment(MetricCounter::kRecoveries);
                     continue;
@@ -495,7 +489,7 @@ void Application::AudioCaptureLoop(std::stop_token stop) {
 void Application::InferenceLoop(std::stop_token stop) {
     inference_health_.MarkStarted(clock_->NowUs());
     while (!stop.stop_requested()) {
-        auto popped = inference_queue_->Pop(stop, std::chrono::milliseconds(250)); // 取帧结果。
+        auto popped = inference_queue_->Pop(stop, std::chrono::milliseconds(250));  // 取帧结果。
         if (popped.status == QueueStatus::kTimeout) {
             continue;
         }
@@ -503,8 +497,8 @@ void Application::InferenceLoop(std::stop_token stop) {
             break;
         }
         metrics_.Increment(MetricCounter::kInferenceRequests);
-        const TimestampUs started = clock_->NowUs(); // 本次推理开始时间，单位微秒。
-        auto result = inference_->Infer(*popped.item, stop); // 推理后端返回结果。
+        const TimestampUs started = clock_->NowUs();  // 本次推理开始时间，单位微秒。
+        auto result = inference_->Infer(*popped.item, stop);  // 推理后端返回结果。
         metrics_.ObserveLatency("inference", clock_->NowUs() - started);
         if (!result) {
             if (result.error().category == ErrorCategory::kCancelled) {
@@ -519,8 +513,7 @@ void Application::InferenceLoop(std::stop_token stop) {
             continue;
         }
         // 编码线程只读取不可变快照，缩短 detection_mutex_ 的持锁时间。
-        auto shared_result =
-            std::make_shared<const DetectionBatch>(std::move(result).value());
+        auto shared_result = std::make_shared<const DetectionBatch>(std::move(result).value());
         {
             std::scoped_lock lock(detection_mutex_);
             latest_detection_ = std::move(shared_result);
@@ -536,7 +529,7 @@ void Application::VideoEncodeLoop(std::stop_token stop) {
     video_encode_health_.MarkStarted(clock_->NowUs());
     while (!stop.stop_requested()) {
         auto popped =
-            video_encode_queue_->Pop(stop, std::chrono::milliseconds(250)); // 取视频帧结果。
+            video_encode_queue_->Pop(stop, std::chrono::milliseconds(250));  // 取视频帧结果。
         if (popped.status == QueueStatus::kTimeout) {
             continue;
         }
@@ -544,7 +537,7 @@ void Application::VideoEncodeLoop(std::stop_token stop) {
             break;
         }
         {
-            std::shared_ptr<const DetectionBatch> latest; // 锁外使用的不可变检测快照。
+            std::shared_ptr<const DetectionBatch> latest;  // 锁外使用的不可变检测快照。
             {
                 std::scoped_lock lock(detection_mutex_);
                 latest = latest_detection_;
@@ -556,8 +549,8 @@ void Application::VideoEncodeLoop(std::stop_token stop) {
                 metrics_.Increment(MetricCounter::kExpiredDetections);
             }
         }
-        const TimestampUs started = clock_->NowUs(); // 视频编码开始时间。
-        auto encoded = video_encoder_->Encode(*popped.item); // 零到多个编码包。
+        const TimestampUs started = clock_->NowUs();          // 视频编码开始时间。
+        auto encoded = video_encoder_->Encode(*popped.item);  // 零到多个编码包。
         metrics_.ObserveLatency("video_encode", clock_->NowUs() - started);
         if (!encoded) {
             video_encode_health_.MarkError(clock_->NowUs());
@@ -588,15 +581,15 @@ void Application::AudioEncodeLoop(std::stop_token stop) {
     audio_encode_health_.MarkStarted(clock_->NowUs());
     while (!stop.stop_requested()) {
         auto popped =
-            audio_encode_queue_->Pop(stop, std::chrono::milliseconds(250)); // 取 PCM 块结果。
+            audio_encode_queue_->Pop(stop, std::chrono::milliseconds(250));  // 取 PCM 块结果。
         if (popped.status == QueueStatus::kTimeout) {
             continue;
         }
         if (popped.status != QueueStatus::kOk || !popped.item.has_value()) {
             break;
         }
-        const TimestampUs started = clock_->NowUs(); // 音频编码开始时间。
-        auto encoded = audio_encoder_->Encode(*popped.item); // 零到多个编码包。
+        const TimestampUs started = clock_->NowUs();          // 音频编码开始时间。
+        auto encoded = audio_encoder_->Encode(*popped.item);  // 零到多个编码包。
         metrics_.ObserveLatency("audio_encode", clock_->NowUs() - started);
         if (!encoded) {
             audio_encode_health_.MarkError(clock_->NowUs());
@@ -628,16 +621,16 @@ void Application::MonitorLoop(std::stop_token stop) {
         static_cast<TimestampUs>(config_.monitoring.metrics_interval_ms) * 1000;
     const TimestampUs health_interval_us =
         static_cast<TimestampUs>(config_.monitoring.health_interval_ms) * 1000;
-    const TimestampUs started_us = clock_->NowUs(); // 监控线程时间轴起点。
-    TimestampUs next_report = started_us + metrics_interval_us; // 下一次指标 deadline。
-    TimestampUs next_health_check = started_us + health_interval_us; // 下一次健康检查。
+    const TimestampUs started_us = clock_->NowUs();              // 监控线程时间轴起点。
+    TimestampUs next_report = started_us + metrics_interval_us;  // 下一次指标 deadline。
+    TimestampUs next_health_check = started_us + health_interval_us;  // 下一次健康检查。
     while (!stop.stop_requested()) {
         // 指标和健康检查周期彼此独立，每次只睡到二者中更早的 deadline。
         const TimestampUs next_wakeup = std::min(next_report, next_health_check);
         if (!clock_->WaitUntil(next_wakeup, stop)) {
             break;
         }
-        const TimestampUs now_us = clock_->NowUs(); // 本轮醒来后的统一当前时间。
+        const TimestampUs now_us = clock_->NowUs();  // 本轮醒来后的统一当前时间。
         if (now_us >= next_report) {
             CollectQueueMetrics();
             Logger::Instance().Log(LogLevel::kInfo, "monitor", "metrics_snapshot",

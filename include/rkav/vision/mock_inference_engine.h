@@ -11,7 +11,7 @@
 namespace rkav {
 
 class MockInferenceEngine final : public IInferenceEngine {
-public:
+   public:
     /// 注入统一时钟，以便测试控制模拟推理耗时。
     explicit MockInferenceEngine(std::shared_ptr<IClock> clock);
 
@@ -22,10 +22,10 @@ public:
     /// 关闭引擎，之后 Infer 会返回状态错误。
     void Close() noexcept override;
 
-private:
+   private:
     std::shared_ptr<IClock> clock_;  // 模拟延迟和完成时间使用的统一时钟。
-    std::mutex mutex_;              // 保护配置和打开状态。
-    InferenceConfig config_;        // Open 后生效的配置快照。
+    std::mutex mutex_;               // 保护配置和打开状态。
+    InferenceConfig config_;         // Open 后生效的配置快照。
     bool open_{false};               // 当前是否允许 Infer。
 };
 

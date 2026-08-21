@@ -9,7 +9,7 @@
 namespace rkav {
 
 class IPacketSink {
-public:
+   public:
     /// 功能：通过接口指针销毁具体输出端，确保派生类资源被正确释放。
     virtual ~IPacketSink() = default;
     /// 打开输出资源并应用队列外的 Sink 配置。

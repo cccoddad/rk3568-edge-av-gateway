@@ -6,16 +6,15 @@
 #include <ctime>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
-
 #include <nlohmann/json.hpp>
+#include <sstream>
 
 namespace rkav {
 namespace {
 
 /// 功能：生成 ISO 8601 UTC 时间字符串，仅用于人类阅读日志时间。
 std::string UtcTimestamp() {
-    const auto now = std::chrono::system_clock::now();  // 当前墙上时钟时间。
+    const auto now = std::chrono::system_clock::now();            // 当前墙上时钟时间。
     const auto time = std::chrono::system_clock::to_time_t(now);  // 转为日历时间。
     const auto milliseconds =
         std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
@@ -26,8 +25,8 @@ std::string UtcTimestamp() {
     gmtime_r(&time, &utc);
 #endif
     std::ostringstream stream;
-    stream << std::put_time(&utc, "%Y-%m-%dT%H:%M:%S") << '.' << std::setw(3)
-           << std::setfill('0') << milliseconds.count() << 'Z';
+    stream << std::put_time(&utc, "%Y-%m-%dT%H:%M:%S") << '.' << std::setw(3) << std::setfill('0')
+           << milliseconds.count() << 'Z';
     return stream.str();
 }
 

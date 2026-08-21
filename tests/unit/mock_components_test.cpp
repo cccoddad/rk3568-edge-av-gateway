@@ -1,10 +1,10 @@
 // 文件作用：验证 Mock 音视频源和 Checksum 编码器的内容、故障恢复及时间戳契约。
 // 主要知识点：ManualClock、确定性数据、摘要比较、XRUN 和编码状态校验。
+#include <gtest/gtest.h>
+
 #include <cstdint>
 #include <cstring>
 #include <memory>
-
-#include <gtest/gtest.h>
 
 #include "rkav/capture/mock_audio_capture.h"
 #include "rkav/capture/mock_video_capture.h"
@@ -79,8 +79,8 @@ TEST(ChecksumVideoEncoderTest, MarksConfiguredKeyframes) {
     VideoEncoderConfig config;
     config.mock_keyframe_interval = 3;
     ASSERT_TRUE(encoder.Open(config));
-    VideoFrame frame{3, 1000, 16, 16, 48, PixelFormat::kRgb888,
-                     Buffer::Allocate(16U * 16U * 3U), {}};
+    VideoFrame frame{3, 1000, 16, 16, 48, PixelFormat::kRgb888, Buffer::Allocate(16U * 16U * 3U),
+                     {}};
 
     auto encoded = encoder.Encode(frame);
     ASSERT_TRUE(encoded);

@@ -1,9 +1,9 @@
 // 文件作用：逐项验证 BoundedQueue 的四种核心关闭、溢出、超时和取消行为。
 // 主要知识点：生产者/消费者、背压、optional、stop_token 和确定性并发测试。
+#include <gtest/gtest.h>
+
 #include <chrono>
 #include <stop_token>
-
-#include <gtest/gtest.h>
 
 #include "rkav/queue/bounded_queue.h"
 

@@ -17,7 +17,7 @@ struct ModelInfo {
 };
 
 class IInferenceEngine {
-public:
+   public:
     /// 功能：通过接口指针销毁具体推理后端，确保派生类资源被正确释放。
     virtual ~IInferenceEngine() = default;
     /// 加载模型或初始化后端，并返回实际模型输入信息。

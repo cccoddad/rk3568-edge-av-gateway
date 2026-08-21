@@ -11,7 +11,7 @@
 namespace rkav {
 
 class IAudioEncoder {
-public:
+   public:
     /// 功能：通过接口指针销毁具体编码器，确保派生类资源被正确释放。
     virtual ~IAudioEncoder() = default;
     /// 用配置初始化编码器；成功后才能调用 Encode。

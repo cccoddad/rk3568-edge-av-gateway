@@ -10,7 +10,7 @@
 namespace rkav {
 
 class Buffer {
-public:
+   public:
     /// 功能：按指定字节数创建并用 0 初始化缓冲区。
     /// 参数 size：需要分配的字节数，不是像素数或样本数。
     explicit Buffer(std::size_t size) : bytes_(size) {}
@@ -35,7 +35,7 @@ public:
     /// 返回只读视图；用于在不暴露 vector 的情况下遍历字节。
     [[nodiscard]] std::span<const std::byte> span() const noexcept { return bytes_; }
 
-private:
+   private:
     std::vector<std::byte> bytes_;  // 真正拥有内存的连续字节数组。
 };
 

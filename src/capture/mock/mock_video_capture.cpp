@@ -34,11 +34,11 @@ void SetPixel(VideoFrame& frame, int x, int y, unsigned char red, unsigned char 
 /// 功能：根据帧序号生成水平方向移动的目标框，用于 Mock 推理和画面内容对账。
 RectF SyntheticBoxForFrame(std::uint64_t sequence, int width, int height) {
     // 检测框按 sequence 水平移动，因此同一输入序号永远得到同一结果。
-    const int box_width = std::max(8, width / 8);   // 目标框宽度，至少 8 像素。
-    const int box_height = std::max(8, height / 6); // 目标框高度，至少 8 像素。
-    const int travel = std::max(1, width - box_width); // 左上角可移动的水平范围。
+    const int box_width = std::max(8, width / 8);       // 目标框宽度，至少 8 像素。
+    const int box_height = std::max(8, height / 6);     // 目标框高度，至少 8 像素。
+    const int travel = std::max(1, width - box_width);  // 左上角可移动的水平范围。
     const int x = static_cast<int>(sequence % static_cast<std::uint64_t>(travel));
-    const int y = std::max(0, (height - box_height) / 2); // 垂直方向保持居中。
+    const int y = std::max(0, (height - box_height) / 2);  // 垂直方向保持居中。
     return RectF{static_cast<float>(x), static_cast<float>(y), static_cast<float>(box_width),
                  static_cast<float>(box_height)};
 }
@@ -57,8 +57,8 @@ Result<void> GenerateRgbTestPattern(std::uint64_t sequence, VideoFrame& frame) {
 
     // 固定色条既便于肉眼检查，也能用 checksum 验证像素布局是否改变。
     constexpr unsigned char kColors[8][3] = {{255, 255, 255}, {255, 255, 0}, {0, 255, 255},
-                                              {0, 255, 0},     {255, 0, 255}, {255, 0, 0},
-                                              {0, 0, 255},     {32, 32, 32}};
+                                             {0, 255, 0},     {255, 0, 255}, {255, 0, 0},
+                                             {0, 0, 255},     {32, 32, 32}};
     for (int y = 0; y < frame.height; ++y) {
         for (int x = 0; x < frame.width; ++x) {
             const int color_index = std::min(7, x * 8 / frame.width);
@@ -67,7 +67,7 @@ Result<void> GenerateRgbTestPattern(std::uint64_t sequence, VideoFrame& frame) {
         }
     }
 
-    const RectF box = SyntheticBoxForFrame(sequence, frame.width, frame.height); // 移动目标框。
+    const RectF box = SyntheticBoxForFrame(sequence, frame.width, frame.height);  // 移动目标框。
     const int left = static_cast<int>(box.x);
     const int top = static_cast<int>(box.y);
     const int right = left + static_cast<int>(box.width);
@@ -115,9 +115,9 @@ Result<VideoCapabilities> MockVideoCapture::Open(const VideoConfig& config) {
 
 /// 功能：等待本帧绝对 deadline，生成一帧 RGB888 数据，或按配置注入失败。
 Result<VideoFrame> MockVideoCapture::Read(std::stop_token stop) {
-    VideoConfig config;          // 本次读取使用的配置快照。
-    TimestampUs start_us = 0;    // 视频时间轴起点，单位微秒。
-    std::uint64_t attempt = 0;   // 当前 Read 尝试序号，同时作为帧序号。
+    VideoConfig config;         // 本次读取使用的配置快照。
+    TimestampUs start_us = 0;   // 视频时间轴起点，单位微秒。
+    std::uint64_t attempt = 0;  // 当前 Read 尝试序号，同时作为帧序号。
     {
         // 仅复制共享状态时持锁；逐像素生成阶段不阻塞 Close 获取 mutex_。
         std::scoped_lock lock(mutex_);
@@ -137,12 +137,12 @@ Result<VideoFrame> MockVideoCapture::Read(std::stop_token stop) {
     if (config.failure.fail_after_frames.has_value() &&
         attempt >= *config.failure.fail_after_frames &&
         attempt < *config.failure.fail_after_frames + config.failure.fail_for_frames) {
-        return Result<VideoFrame>::Failure(VideoError(
-            ErrorCategory::kDeviceDisconnected, "injected camera disconnection", true));
+        return Result<VideoFrame>::Failure(
+            VideoError(ErrorCategory::kDeviceDisconnected, "injected camera disconnection", true));
     }
 
     // PTS 和等待 deadline 都由同一个绝对节拍器计算，避免两套时间逻辑不一致。
-    FramePacer pacer(start_us, static_cast<std::uint32_t>(config.fps)); // 绝对帧节拍器。
+    FramePacer pacer(start_us, static_cast<std::uint32_t>(config.fps));  // 绝对帧节拍器。
     auto deadline = pacer.DeadlineFor(attempt);  // 本帧应到达的绝对 PTS/deadline。
     if (!deadline) {
         return Result<VideoFrame>::Failure(deadline.error());
@@ -161,10 +161,16 @@ Result<VideoFrame> MockVideoCapture::Read(std::stop_token stop) {
     }
 
     const int stride = config.width * 3;  // RGB888 每像素 3 字节，本实现无额外行填充。
-    const std::size_t buffer_size = static_cast<std::size_t>(stride) *
-                                    static_cast<std::size_t>(config.height);  // 整帧字节数。
-    VideoFrame frame{attempt, deadline.value(), config.width, config.height, stride,
-                     PixelFormat::kRgb888, Buffer::Allocate(buffer_size), FrameMemory{}};
+    const std::size_t buffer_size =
+        static_cast<std::size_t>(stride) * static_cast<std::size_t>(config.height);  // 整帧字节数。
+    VideoFrame frame{attempt,
+                     deadline.value(),
+                     config.width,
+                     config.height,
+                     stride,
+                     PixelFormat::kRgb888,
+                     Buffer::Allocate(buffer_size),
+                     FrameMemory{}};
     auto generated = GenerateRgbTestPattern(attempt, frame);
     if (!generated) {
         return Result<VideoFrame>::Failure(generated.error());

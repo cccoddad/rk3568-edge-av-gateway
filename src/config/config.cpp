@@ -4,11 +4,10 @@
 
 #include <algorithm>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <set>
 #include <sstream>
 #include <utility>
-
-#include <nlohmann/json.hpp>
 
 namespace rkav {
 namespace {
@@ -17,16 +16,15 @@ using Json = nlohmann::json;  // 缩短本文件内 JSON 类型名称。
 
 /// 功能：构造 config 模块错误；path 放在 operation 字段中以精确定位配置项。
 Error ConfigError(std::string path, std::string message) {
-    return Error{ErrorCategory::kInvalidConfig, 0, "config", std::move(path),
-                 std::move(message), false};
+    return Error{
+        ErrorCategory::kInvalidConfig, 0, "config", std::move(path), std::move(message), false};
 }
 
 /// 功能：确认 json 是对象，并拒绝 known 集合之外的任何字段。
 Result<void> RejectUnknownKeys(const Json& object, std::string_view path,
                                const std::set<std::string>& known) {
     if (!object.is_object()) {
-        return Result<void>::Failure(
-            ConfigError(std::string(path), "expected a JSON object"));
+        return Result<void>::Failure(ConfigError(std::string(path), "expected a JSON object"));
     }
     // 未知字段通常是拼写错误，不能静默回退到默认值。
     for (const auto& [key, unused] : object.items()) {
@@ -103,27 +101,24 @@ std::optional<T> OptionalNumber(const Json& object, std::string_view key) {
 
 /// 功能：解析 runtime 子对象；未出现字段继续保留结构体默认值。
 Result<void> ParseRuntime(const Json& json, RuntimeConfig& config) {
-    auto keys = RejectUnknownKeys(json, "runtime",  // 当前子对象的字段检查结果。
-                                  {"mode", "log_level", "shutdown_timeout_ms",
-                                   "run_duration_seconds"});
+    auto keys =
+        RejectUnknownKeys(json, "runtime",  // 当前子对象的字段检查结果。
+                          {"mode", "log_level", "shutdown_timeout_ms", "run_duration_seconds"});
     if (!keys) {
         return keys;
     }
     config.mode = json.value("mode", config.mode);
     config.log_level = json.value("log_level", config.log_level);
-    config.shutdown_timeout_ms =
-        json.value("shutdown_timeout_ms", config.shutdown_timeout_ms);
-    config.run_duration_seconds =
-        json.value("run_duration_seconds", config.run_duration_seconds);
+    config.shutdown_timeout_ms = json.value("shutdown_timeout_ms", config.shutdown_timeout_ms);
+    config.run_duration_seconds = json.value("run_duration_seconds", config.run_duration_seconds);
     return Result<void>::Success();
 }
 
 /// 功能：解析视频参数、溢出策略和视频故障注入配置。
 Result<void> ParseVideo(const Json& json, VideoConfig& config) {
     auto keys = RejectUnknownKeys(json, "video",
-                                  {"backend", "width", "height", "fps", "format",
-                                   "queue_capacity", "overflow_policy", "pattern", "realtime",
-                                   "failure"});
+                                  {"backend", "width", "height", "fps", "format", "queue_capacity",
+                                   "overflow_policy", "pattern", "realtime", "failure"});
     if (!keys) {
         return keys;
     }
@@ -142,8 +137,8 @@ Result<void> ParseVideo(const Json& json, VideoConfig& config) {
         config.format = format.value();
     }
     if (json.contains("overflow_policy")) {
-        auto policy = ParseOverflow(json.at("overflow_policy").get<std::string>(),
-                                    "video.overflow_policy");
+        auto policy =
+            ParseOverflow(json.at("overflow_policy").get<std::string>(), "video.overflow_policy");
         if (!policy) {
             return Result<void>::Failure(policy.error());
         }
@@ -167,10 +162,10 @@ Result<void> ParseVideo(const Json& json, VideoConfig& config) {
 
 /// 功能：解析 PCM 参数、信号发生器和音频故障注入配置。
 Result<void> ParseAudio(const Json& json, AudioConfig& config) {
-    auto keys = RejectUnknownKeys(json, "audio",
-                                  {"backend", "sample_rate", "channels", "format",
-                                   "frame_duration_ms", "queue_capacity_ms", "signal",
-                                   "frequency_hz", "amplitude", "realtime", "failure"});
+    auto keys = RejectUnknownKeys(
+        json, "audio",
+        {"backend", "sample_rate", "channels", "format", "frame_duration_ms", "queue_capacity_ms",
+         "signal", "frequency_hz", "amplitude", "realtime", "failure"});
     if (!keys) {
         return keys;
     }
@@ -208,9 +203,8 @@ Result<void> ParseAudio(const Json& json, AudioConfig& config) {
 /// 功能：解析 Mock 推理尺寸、耗时、队列和结果有效期。
 Result<void> ParseInference(const Json& json, InferenceConfig& config) {
     auto keys = RejectUnknownKeys(json, "inference",
-                                  {"backend", "mode", "input_width", "input_height",
-                                   "latency_ms", "queue_capacity", "overflow_policy",
-                                   "max_result_age_ms"});
+                                  {"backend", "mode", "input_width", "input_height", "latency_ms",
+                                   "queue_capacity", "overflow_policy", "max_result_age_ms"});
     if (!keys) {
         return keys;
     }
@@ -253,8 +247,7 @@ Result<void> ParseOutputs(const Json& json, std::vector<OutputConfig>& outputs) 
         output.type = item.value("type", output.type);
         output.enabled = item.value("enabled", output.enabled);
         output.required = item.value("required", output.required);
-        output.validate_timestamps =
-            item.value("validate_timestamps", output.validate_timestamps);
+        output.validate_timestamps = item.value("validate_timestamps", output.validate_timestamps);
         output.path = item.value("path", output.path);
         output.queue_capacity = item.value("queue_capacity", output.queue_capacity);
         output.write_delay_ms = item.value("write_delay_ms", output.write_delay_ms);
@@ -274,14 +267,13 @@ Result<void> ParseOutputs(const Json& json, std::vector<OutputConfig>& outputs) 
 
 /// 功能：解析指标和 worker 健康检查周期。
 Result<void> ParseMonitoring(const Json& json, MonitoringConfig& config) {
-    auto keys = RejectUnknownKeys(json, "monitoring",
-                                  {"metrics_interval_ms", "health_interval_ms",
-                                   "worker_stall_timeout_ms"});
+    auto keys =
+        RejectUnknownKeys(json, "monitoring",
+                          {"metrics_interval_ms", "health_interval_ms", "worker_stall_timeout_ms"});
     if (!keys) {
         return keys;
     }
-    config.metrics_interval_ms =
-        json.value("metrics_interval_ms", config.metrics_interval_ms);
+    config.metrics_interval_ms = json.value("metrics_interval_ms", config.metrics_interval_ms);
     config.health_interval_ms = json.value("health_interval_ms", config.health_interval_ms);
     config.worker_stall_timeout_ms =
         json.value("worker_stall_timeout_ms", config.worker_stall_timeout_ms);
@@ -307,9 +299,8 @@ Result<AppConfig> ConfigLoader::Parse(std::string_view json_text) {
     try {
         const Json root = Json::parse(json_text);  // 顶层 JSON 对象。
         auto keys = RejectUnknownKeys(root, "config",
-                                      {"schema_version", "runtime", "video", "audio",
-                                       "inference", "video_encoder", "audio_encoder", "outputs",
-                                       "monitoring"});
+                                      {"schema_version", "runtime", "video", "audio", "inference",
+                                       "video_encoder", "audio_encoder", "outputs", "monitoring"});
         if (!keys) {
             return Result<AppConfig>::Failure(keys.error());
         }
@@ -342,13 +333,12 @@ Result<AppConfig> ConfigLoader::Parse(std::string_view json_text) {
         }
         if (root.contains("video_encoder")) {
             const auto& encoder = root.at("video_encoder");
-            keys = RejectUnknownKeys(encoder, "video_encoder",
-                                     {"backend", "mock_keyframe_interval"});
+            keys =
+                RejectUnknownKeys(encoder, "video_encoder", {"backend", "mock_keyframe_interval"});
             if (!keys) {
                 return Result<AppConfig>::Failure(keys.error());
             }
-            config.video_encoder.backend =
-                encoder.value("backend", config.video_encoder.backend);
+            config.video_encoder.backend = encoder.value("backend", config.video_encoder.backend);
             config.video_encoder.mock_keyframe_interval = encoder.value(
                 "mock_keyframe_interval", config.video_encoder.mock_keyframe_interval);
         }
@@ -358,8 +348,7 @@ Result<AppConfig> ConfigLoader::Parse(std::string_view json_text) {
             if (!keys) {
                 return Result<AppConfig>::Failure(keys.error());
             }
-            config.audio_encoder.backend =
-                encoder.value("backend", config.audio_encoder.backend);
+            config.audio_encoder.backend = encoder.value("backend", config.audio_encoder.backend);
         }
         if (root.contains("outputs")) {
             auto result = ParseOutputs(root.at("outputs"), config.outputs);
@@ -400,10 +389,9 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
         return fail("runtime.mode", "only mock mode is implemented in the board-only phase");
     }
     const std::set<std::string> supported_log_levels{"trace", "debug", "info",
-                                                     "warn", "error", "fatal"};
+                                                     "warn",  "error", "fatal"};
     if (!supported_log_levels.contains(config.runtime.log_level)) {
-        return fail("runtime.log_level",
-                    "expected one of: trace, debug, info, warn, error, fatal");
+        return fail("runtime.log_level", "expected one of: trace, debug, info, warn, error, fatal");
     }
     if (config.runtime.shutdown_timeout_ms < 100 || config.runtime.shutdown_timeout_ms > 60000) {
         return fail("runtime.shutdown_timeout_ms", "expected value in range [100, 60000]");
@@ -443,8 +431,7 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
         return fail("audio.format", "mock audio currently produces S16_LE only");
     }
     if (config.audio.frame_duration_ms <= 0 || config.audio.frame_duration_ms > 1000 ||
-        (static_cast<std::int64_t>(config.audio.sample_rate) *
-             config.audio.frame_duration_ms) %
+        (static_cast<std::int64_t>(config.audio.sample_rate) * config.audio.frame_duration_ms) %
                 1000 !=
             0) {
         return fail("audio.frame_duration_ms",
@@ -476,14 +463,14 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
         return fail("inference", "input dimensions must be positive");
     }
     if (config.inference.latency_ms < 0 || config.inference.queue_capacity == 0U ||
-        config.inference.queue_capacity > 4096U ||
-        config.inference.max_result_age_ms < 0) {
+        config.inference.queue_capacity > 4096U || config.inference.max_result_age_ms < 0) {
         return fail("inference",
                     "latency/age must be non-negative and queue capacity must be in [1, 4096]");
     }
     if (config.video_encoder.backend != "checksum" ||
         config.video_encoder.mock_keyframe_interval <= 0) {
-        return fail("video_encoder", "checksum backend and positive keyframe interval are required");
+        return fail("video_encoder",
+                    "checksum backend and positive keyframe interval are required");
     }
     if (config.audio_encoder.backend != "checksum") {
         return fail("audio_encoder.backend", "checksum backend is required");
@@ -519,10 +506,8 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
     if (!has_enabled_output) {
         return fail("outputs", "at least one output must be enabled");
     }
-    if (config.monitoring.metrics_interval_ms <= 0 ||
-        config.monitoring.health_interval_ms <= 0 ||
-        config.monitoring.worker_stall_timeout_ms <=
-            config.monitoring.health_interval_ms) {
+    if (config.monitoring.metrics_interval_ms <= 0 || config.monitoring.health_interval_ms <= 0 ||
+        config.monitoring.worker_stall_timeout_ms <= config.monitoring.health_interval_ms) {
         return fail("monitoring",
                     "intervals must be positive and stall timeout must exceed health interval");
     }
@@ -530,9 +515,8 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
     const int video_progress_interval_ms =
         (1000 + config.video.fps - 1) / config.video.fps +
         config.video.failure.read_delay_ms;  // 最慢情况下两次视频进展的间隔。
-    const int slowest_stage_ms =
-        std::max({video_progress_interval_ms, config.audio.frame_duration_ms,
-                  config.inference.latency_ms});
+    const int slowest_stage_ms = std::max(
+        {video_progress_interval_ms, config.audio.frame_duration_ms, config.inference.latency_ms});
     if (config.monitoring.worker_stall_timeout_ms <=
         slowest_stage_ms + config.monitoring.health_interval_ms) {
         return fail("monitoring.worker_stall_timeout_ms",
@@ -543,7 +527,8 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
 
 /// 功能：生成精简、无敏感路径的配置摘要，用于启动日志和 --validate-config。
 std::string ConfigSummary(const AppConfig& config) {
-    Json summary{  // 只列出判断本次运行形态所需的核心字段。
+    Json summary{
+        // 只列出判断本次运行形态所需的核心字段。
         {"schema_version", config.schema_version},
         {"runtime", {{"mode", config.runtime.mode}, {"log_level", config.runtime.log_level}}},
         {"video",
