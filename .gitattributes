@@ -1,0 +1,22 @@
+# Keep repository text files consistent across Windows and Linux.
+* text=auto
+
+*.c text eol=lf
+*.cc text eol=lf
+*.cmake text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.hpp text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.ps1 text eol=lf
+*.service text eol=lf
+*.sh text eol=lf
+*.txt text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+.clang-format text eol=lf
+.clang-tidy text eol=lf
+.editorconfig text eol=lf
+.gitignore text eol=lf
+CMakeLists.txt text eol=lf

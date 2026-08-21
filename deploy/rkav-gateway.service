@@ -1,0 +1,24 @@
+# 文件作用：让 RK3568 上的 systemd 以专用用户托管网关进程，并限制可写目录和权限。
+# 主要知识点：服务依赖、失败重启、SIGTERM 优雅停止和 systemd 安全沙箱。
+[Unit]
+Description=RK3568 Audio Video Edge Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rkav
+Group=rkav
+ExecStart=/opt/rkav/bin/rkav-gateway --config /opt/rkav/etc/rkav/mock.json
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/rkav
+
+[Install]
+WantedBy=multi-user.target

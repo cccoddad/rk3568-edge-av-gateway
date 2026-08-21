@@ -1,0 +1,11 @@
+/build/
+/out/
+/.cache/
+/.vscode/settings.json
+compile_commands.json
+*.log
+*.core
+*.profraw
+*.profdata
+.DS_Store
+Thumbs.db

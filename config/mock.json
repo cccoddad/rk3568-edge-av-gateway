@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "runtime": {
+    "mode": "mock",
+    "log_level": "info",
+    "shutdown_timeout_ms": 5000,
+    "run_duration_seconds": 10
+  },
+  "video": {
+    "backend": "mock",
+    "width": 640,
+    "height": 360,
+    "fps": 30,
+    "format": "RGB888",
+    "queue_capacity": 4,
+    "overflow_policy": "drop_oldest",
+    "pattern": "moving_box",
+    "realtime": true,
+    "failure": {
+      "fail_after_frames": null,
+      "fail_for_frames": 0,
+      "read_delay_ms": 0
+    }
+  },
+  "audio": {
+    "backend": "mock",
+    "sample_rate": 48000,
+    "channels": 1,
+    "format": "S16_LE",
+    "frame_duration_ms": 20,
+    "queue_capacity_ms": 300,
+    "signal": "sine",
+    "frequency_hz": 1000.0,
+    "amplitude": 0.25,
+    "realtime": true,
+    "failure": {
+      "xrun_every_blocks": null,
+      "disconnect_after_blocks": null
+    }
+  },
+  "inference": {
+    "backend": "mock",
+    "mode": "synthetic_target",
+    "input_width": 320,
+    "input_height": 320,
+    "latency_ms": 20,
+    "queue_capacity": 1,
+    "overflow_policy": "keep_latest",
+    "max_result_age_ms": 200
+  },
+  "video_encoder": {
+    "backend": "checksum",
+    "mock_keyframe_interval": 30
+  },
+  "audio_encoder": {
+    "backend": "checksum"
+  },
+  "outputs": [
+    {
+      "type": "null",
+      "enabled": true,
+      "required": true,
+      "validate_timestamps": true,
+      "queue_capacity": 16,
+      "overflow_policy": "drop_oldest",
+      "write_delay_ms": 0,
+      "fail_after_packets": null
+    },
+    {
+      "type": "jsonl",
+      "enabled": false,
+      "required": false,
+      "validate_timestamps": true,
+      "path": "out/packets.jsonl",
+      "queue_capacity": 16,
+      "overflow_policy": "drop_oldest",
+      "write_delay_ms": 0,
+      "fail_after_packets": null
+    }
+  ],
+  "monitoring": {
+    "metrics_interval_ms": 1000,
+    "health_interval_ms": 500,
+    "worker_stall_timeout_ms": 3000
+  }
+}

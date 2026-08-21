@@ -1,0 +1,55 @@
+# 文件作用：在 Ubuntu 上自动执行格式检查、clang-tidy、Debug 测试和 Sanitizer 测试。
+# 主要知识点：GitHub Actions 多 Job 门禁、依赖安装、CMake Preset 和失败阻止合并。
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  static-analysis:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install analysis tools
+        run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy ninja-build
+      - name: Check formatting
+        run: >-
+          find app include src tests -type f
+          \( -name '*.cpp' -o -name '*.h' \)
+          -print0 | xargs -0 clang-format --dry-run --Werror
+      - name: Configure clang-tidy build
+        run: >-
+          cmake -S . -B build/tidy -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DRKAV_BUILD_TESTS=OFF
+          -DCMAKE_CXX_CLANG_TIDY=clang-tidy
+      - name: Run clang-tidy while building
+        run: cmake --build build/tidy -j2
+
+  debug:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset debug
+      - name: Build
+        run: cmake --build --preset debug -j2
+      - name: Test
+        run: ctest --preset debug
+      - name: Validate default configuration
+        run: ./build/debug/rkav-gateway --validate-config --config config/mock.json
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure ASan and UBSan
+        run: cmake --preset asan
+      - name: Build
+        run: cmake --build --preset asan -j2
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --preset asan

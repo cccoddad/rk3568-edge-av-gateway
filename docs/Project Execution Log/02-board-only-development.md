@@ -1,0 +1,934 @@
+# 只有 RK3568 开发板时的可实施开发计划
+
+## 1. 文档定位
+
+本文档是 [整体代码架构](./01-overall-code-architecture.md) 的当前阶段子计划，适用于手头只有 RK3568 开发板、适配器和 USB 线，尚无 USB 摄像头、USB 麦克风、可靠网络调试条件或完整 Rockchip 媒体 SDK 的情况。
+
+本阶段不追求“假装硬件已经可用”，而是完成最终产品一定会使用的稳定核心，用可控的 Mock 后端验证并发、时间戳、背压、错误恢复、配置、指标和停止流程。
+
+### 1.1 本阶段的可交付结果
+
+完成后，即使没有摄像头和麦克风，项目也应当能：
+
+- 在 x86_64 Linux 和 RK3568 aarch64 Linux 上编译 Mock 版。
+- 以配置的 30 FPS 生成规律可校验的视频帧。
+- 以 48 kHz、单声道、S16_LE 生成静音或正弦波音频块。
+- 通过有界队列在多个线程间流转数据，下游变慢时内存不会无限增长。
+- 输出可预测的 Mock 检测结果，并严格绑定原帧序号和 PTS。
+- 统计 FPS、处理延迟、丢帧数、队列深度、高水位和注入错误。
+- 在 SIGINT/SIGTERM 或内部错误下有界退出，所有线程都能被唤醒和 `join`。
+- 通过单元测试、集成测试和至少 30 分钟 Mock 稳定性测试。
+
+### 1.2 本阶段不能宣称完成的内容
+
+在没有对应设备和 SDK 时，不得把以下内容标记为已验证：
+
+- UVC 摄像头的 V4L2 能力协商、MMAP 采集和断开恢复。
+- USB 麦克风的 ALSA 设备选择、PCM 参数协商和 XRUN 恢复。
+- RKNN Runtime 与当前板卡 BSP/内核/驱动的兼容性和真实 NPU 耗时。
+- RGA 像素格式、stride、对齐和 DMA-BUF 链路。
+- MPP H.264 硬件编码的参数、码流正确性和实时性。
+- 真实 MP4/RTSP 的音画同步和端到端延迟。
+
+可以先写这些模块的接口、工厂、状态机和编译适配层，但真实实现必须等对应硬件到手后逐项验证。
+
+## 2. 开始前的板卡基线记录
+
+即使只有板子，也应先建立可重复的运行环境。如果板卡尚未有可启动系统，则先在 PC 上完成第 3–10 节的代码，待存储卡到手后再执行本节。
+
+需记录的信息：
+
+```bash
+uname -a
+cat /etc/os-release
+uname -m
+cat /proc/cpuinfo
+free -h
+lsblk
+df -h
+ip addr
+lsusb
+ls /dev/video* 2>/dev/null || true
+arecord -l 2>/dev/null || true
+ldconfig -p | grep -E 'rknn|rga|rockchip_mpp|avcodec|avformat' || true
+dmesg | tail -n 120
+```
+
+记录结果应保存到 `docs/environment/board-baseline.md`，至少包含：
+
+- 开发板的准确型号、硬件版本和内存容量。
+- Linux 发行版、内核版本和 aarch64 架构。
+- 镜像下载页、镜像文件名和校验值。
+- GCC/Clang、CMake、Ninja、GDB 版本。
+- 当前已安装的 FFmpeg、RKNN、RGA、MPP 动态库及其来源。
+- 板卡待机温度、供电时是否报 undervoltage 或 USB 错误。
+
+这些信息将成为后续“代码问题还是 BSP/库版本问题”的判断基线。
+
+## 3. 本阶段的代码边界
+
+### 3.1 现在应该完整实现
+
+| 模块 | 现在的完成程度 | 后续硬件到位后的处理 |
+|---|---|---|
+| CMake 工程和特性开关 | 完整实现 | 只开启对应后端 |
+| 公共数据类型和错误模型 | 完整实现 | 保持稳定，只允许向后兼容扩展 |
+| 单调时钟和 PTS 转换 | 完整实现 | 硬件时间戳在采集后端转换到此时间域 |
+| 有界队列 | 完整实现并压力测试 | 不替换，只根据实测调整容量 |
+| 配置加载与校验 | 完整实现 | 增加真实设备配置项 |
+| MockVideoCapture | 完整实现 | 永久保留用于 CI/回归测试 |
+| MockAudioCapture | 完整实现 | 永久保留用于 CI/回归测试 |
+| MockInferenceEngine | 完整实现 | 与 RKNN 实现并存 |
+| Null/Checksum Encoder | 完整实现 | 与 FFmpeg/MPP 实现并存 |
+| PacketRouter 和 Null 输出 | 完整实现 | 接入 MP4/RTSP 输出 |
+| 指标、日志、健康监测 | 完整实现 | 增加硬件指标采集器 |
+| Application 组装与启停 | 完整实现 | 仅通过工厂替换后端 |
+| 单元/集成/稳定性测试 | 完整实现 | 作为硬件优化的回归基线 |
+
+### 3.2 现在只定义接口和骨架
+
+| 模块 | 现在可写的内容 | 暂时不写的内容 |
+|---|---|---|
+| V4L2VideoCapture | 类、配置、状态、错误映射、编译开关 | 针对未知摄像头的格式写死和伪验证 |
+| AlsaAudioCapture | 类、配置、Recover 契约、编译开关 | 写死 `hw:1,0`、假设 period/buffer 一定成功 |
+| RknnInferenceEngine | 接口、模型元数据结构、错误类别 | 未验证 SDK 版本的 API 实现 |
+| RgaPreprocessor | 输入/输出契约和 fallback 选择 | 未知 stride/内存类型下的真实调用 |
+| MppVideoEncoder | 配置结构、编码包契约、Flush 契约 | 未基于板卡 MPP 样例验证的调用 |
+| FFmpegMuxer/Streamer | 输入包契约、状态机、重连策略 | 未经真实编码包验证的封装细节 |
+
+### 3.3 现在不做
+
+- 不为了显示“使用了 NPU”而写不能运行的 RKNN 伪实现。
+- 不在没有真实图像格式和硬件缓冲区时提前设计全链路零拷贝。
+- 不将随机字节写成 `.h264`/`.mp4` 并宣称编码模块完成。
+- 不写死 `/dev/video0`、`card 1`、网卡名称、IP 地址和板卡库路径。
+- 不用 `sleep_for(33ms)` 代替可校正漂移的帧节拍器。
+- 不使用 detached thread，不允许进程退出时遗留无法管理的线程。
+
+## 4. 第一批应创建的工程骨架
+
+```text
+.
+|-- CMakeLists.txt
+|-- cmake/Options.cmake
+|-- app/main.cpp
+|-- config/mock.json
+|-- include/rkav/
+|   |-- app/application.h
+|   |-- common/{buffer.h,clock.h,error.h,result.h,types.h}
+|   |-- config/config.h
+|   |-- queue/bounded_queue.h
+|   |-- capture/{video_capture.h,audio_capture.h}
+|   |-- vision/inference_engine.h
+|   |-- media/{video_encoder.h,audio_encoder.h}
+|   |-- output/{packet_router.h,packet_sink.h}
+|   `-- monitor/{metrics.h,health_monitor.h,logger.h}
+|-- src/
+|   |-- app/application.cpp
+|   |-- common/
+|   |-- config/
+|   |-- capture/mock/{mock_video_capture.cpp,mock_audio_capture.cpp}
+|   |-- vision/mock/mock_inference_engine.cpp
+|   |-- media/mock/{checksum_video_encoder.cpp,checksum_audio_encoder.cpp}
+|   |-- output/{packet_router.cpp,null_packet_sink.cpp}
+|   `-- monitor/
+`-- tests/
+    |-- unit/
+    |-- integration/
+    `-- soak/
+```
+
+此骨架是整体架构的真实子集。后续是增加 `src/capture/v4l2`、`src/capture/alsa`、`src/vision/rknn`、`src/vision/rga`和 `src/media/mpp`，而不是重命名或删除当前模块。
+
+## 5. 阶段 A：工程系统和编译基线
+
+### 5.1 CMake 目标划分
+
+建议至少划分为：
+
+```text
+rkav_core          公共类型、队列、配置、时钟、指标
+rkav_mock          Mock capture/inference/encoder/sink
+rkav_app           Application 组装和生命周期
+rkav-gateway       可执行程序
+rkav_unit_tests    单元测试
+rkav_integration_tests
+```
+
+各个后端使用独立 target，避免将 RKNN/MPP 链接依赖泄漏给 `rkav_core`。
+
+### 5.2 必要编译规则
+
+- C++17 为最低标准；若使用 `std::jthread`/`std::stop_token` 则升级为 C++20，并在工程中统一，不得混用。
+- GCC/Clang 开启 `-Wall -Wextra -Wpedantic`，第一方代码建议开启 `-Werror`。
+- Debug 构建开启断言和详细日志；Release 保留错误日志与指标。
+- PC Debug 构建提供 ASan/UBSan 选项。开发板上是否使用 sanitizer 根据内存与工具链决定。
+- 默认 `RKAV_ENABLE_MOCK=ON`，所有硬件选项默认为 `OFF`。
+
+### 5.3 构建方式
+
+```bash
+cmake -S . -B build/mock -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DRKAV_BUILD_TESTS=ON \
+  -DRKAV_ENABLE_MOCK=ON \
+  -DRKAV_WITH_V4L2=OFF \
+  -DRKAV_WITH_ALSA=OFF \
+  -DRKAV_WITH_RKNN=OFF \
+  -DRKAV_WITH_RGA=OFF \
+  -DRKAV_WITH_MPP=OFF
+cmake --build build/mock
+ctest --test-dir build/mock --output-on-failure
+```
+
+在 RK3568 板上有原生编译环境时，同一套命令应能构建 Mock 版。若采用交叉编译，只增加 toolchain file，不改源码。
+
+### 5.4 完成定义
+
+- 全新构建目录可一条命令配置和编译。
+- 不安装 RKNN/RGA/MPP 时 Mock 版不会因缺失头文件而失败。
+- 可执行程序支持 `--config`、`--validate-config`、`--version`和 `--help`。
+- `ctest` 可发现并运行所有测试。
+
+## 6. 阶段 B：公共数据类型与错误模型
+
+### 6.1 Buffer
+
+`Buffer` 封装一块连续字节内存，对外至少提供：
+
+```cpp
+std::byte* data() noexcept;
+const std::byte* data() const noexcept;
+std::size_t size() const noexcept;
+std::size_t capacity() const noexcept;
+```
+
+第一版可使用 `std::vector<std::byte>` 或 RAII 数组实现，但上层不应直接依赖 `std::vector`。后续加入 Buffer Pool 或 DMA-BUF 时，可扩展 `FrameMemory`或增加 buffer subtype，不修改管道语义。
+
+### 6.2 帧和包的不变量
+
+- `sequence` 在每个源内严格递增，从 0 或 1 开始，项目内统一。
+- `pts_us` 必须单调不减，使用单调时钟域。
+- `width/height/stride/format` 必须与 buffer 布局一致。
+- 不允许用 `nullptr + size > 0` 表示有效帧。
+- `EncodedPacket` 必须明确 codec、stream kind、PTS、DTS、time base 和关键帧标志。
+
+### 6.3 错误模型
+
+不建议仅返回 `bool`。错误至少包含：
+
+```cpp
+enum class ErrorCategory {
+    kInvalidConfig,
+    kNotSupported,
+    kDeviceNotFound,
+    kDeviceDisconnected,
+    kTimeout,
+    kWouldBlock,
+    kIo,
+    kCodec,
+    kInference,
+    kNetwork,
+    kResourceExhausted,
+    kCancelled,
+    kInternal
+};
+
+struct Error {
+    ErrorCategory category;
+    int native_code;
+    std::string module;
+    std::string operation;
+    std::string message;
+    bool retryable;
+};
+```
+
+`native_code` 用于保留 errno、ALSA 返回值、FFmpeg error code 或 RKNN/MPP 错误码；上层依据 `category` 和 `retryable` 做通用决策。
+
+### 6.4 必测内容
+
+- 空 buffer、大小不符、非法图像尺寸会被拒绝。
+- 移动/共享 buffer 后无重复释放。
+- Error 能保留底层错误码和上下文。
+- Result 同时覆盖成功、失败、`void` 成功三类情况。
+
+## 7. 阶段 C：单调时钟、节拍器与时间戳
+
+### 7.1 时钟抽象
+
+```cpp
+class IClock {
+public:
+    virtual ~IClock() = default;
+    virtual TimestampUs NowUs() const noexcept = 0;
+};
+```
+
+实现：
+
+- `SteadyClock`：生产使用，基于 `std::chrono::steady_clock`。
+- `ManualClock`：测试使用，由测试代码主动推进，避免单元测试真实 sleep。
+
+### 7.2 Mock 视频节拍
+
+30 FPS 的理论周期不是整数微秒。不要每帧固定 `sleep_for(33ms)`，否则会累积漂移。应从统一起点计算第 n 帧的绝对截止时间：
+
+```text
+deadline(n) = start + n * 1_000_000 / fps
+```
+
+实现时使用有理数或保留余数，避免整数截断长期积累。如果处理已错过多个 deadline，记录满足条件的跳帧数，不应连续瞬时产生大量帧追赶时间。
+
+### 7.3 时间转换
+
+提供独立函数，把微秒转为任意 `Rational{num, den}` 的 timestamp，必须防止中间乘法溢出，并明确四舍五入规则。
+
+### 7.4 完成定义
+
+- 30 FPS 运行 30 分钟后，Mock 生成帧数与理论值的差异不超过启停边界允许值。
+- 人工时钟下可以无真实等待测试 1 小时虚拟数据。
+- 将 PTS 转为 1/90000、1/48000 和 1/1000 time base 的结果通过边界测试。
+
+## 8. 阶段 D：有界阻塞队列
+
+### 8.1 必须支持的行为
+
+```cpp
+enum class OverflowPolicy {
+    kBlockProducer,
+    kDropNewest,
+    kDropOldest,
+    kKeepLatest
+};
+
+enum class QueueStatus {
+    kOk,
+    kTimeout,
+    kClosed,
+    kDropped,
+    kCancelled
+};
+```
+
+队列至少提供：
+
+- 有超时或可取消的 `Push`。
+- 有超时或可取消的 `Pop`。
+- `Close()`：幂等，唤醒所有等待者，关闭后拒绝新 Push。
+- 关闭后是先排空旧数据还是立即结束，必须有明确契约。建议提供 `CloseAndDrain` 和 `Abort` 两种语义。
+- 当前深度、容量、高水位、push/pop/drop/timeout 计数。
+
+### 8.2 不同数据的默认策略
+
+- 实时视频采集队列：`kDropOldest`，保留新鲜帧。
+- 推理输入队列：`kKeepLatest`，通常容量 1–2。
+- 音频采集队列：优先短时间 `kBlockProducer`，上限后报错而非静默丢数据。
+- 控制命令队列：小容量 `kBlockProducer` 或显式拒绝，不丢控制命令。
+
+### 8.3 必测场景
+
+- 单生产者/单消费者的 FIFO 顺序。
+- 多生产者/多消费者无丢失、无重复。
+- 四种 overflow policy 的精确结果。
+- 空队列 Pop 超时和满队列 Push 超时。
+- 线程正在 Push/Pop 阻塞时调用 `Close()`，必须立即唤醒。
+- 重复 `Close()` 不崩溃且状态不回退。
+- 消费者异常退出后，生产者可被取消而不是永久阻塞。
+- 使用 ThreadSanitizer 的 PC 构建下无数据竞争（若工具链可用）。
+
+## 9. 阶段 E：Mock 音视频源
+
+### 9.1 MockVideoCapture
+
+必须输出真正有结构的图像，不建议只填充全零数据，否则难以发现 stride、通道顺序和帧丢失问题。
+
+建议生成 RGB24 测试图，包含：
+
+- 固定色条或棋盘格背景。
+- 随 `sequence` 水平移动的矩形，作为虚拟目标。
+- 左上角用二进制块或简单像素编码写入帧号，不依赖字体。
+- 可选颜色渐变，便于发现 RGB/BGR 颠倒。
+
+配置项：
+
+```json
+{
+  "backend": "mock",
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "format": "RGB888",
+  "realtime": true,
+  "pattern": "moving_box",
+  "failure": {
+    "fail_after_frames": null,
+    "fail_for_frames": 0,
+    "read_delay_ms": 0
+  }
+}
+```
+
+`realtime=false` 用于快速测试，由 `ManualClock` 驱动；`realtime=true` 用于真实线程和资源压力测试。
+
+### 9.2 MockAudioCapture
+
+支持至少两种模式：
+
+- `silence`：全 0 PCM，用于基础流程。
+- `sine`：默认 1000 Hz、峰值不超过 int16 量程的 25%，用于验证样本数、连续性和后续编码。
+
+每块默认 20 ms，48 kHz 单声道即 960 samples。正弦波相位必须在块之间连续，不能每个 block 重置相位。
+
+配置项：
+
+```json
+{
+  "backend": "mock",
+  "sample_rate": 48000,
+  "channels": 1,
+  "format": "S16_LE",
+  "frame_duration_ms": 20,
+  "signal": "sine",
+  "frequency_hz": 1000.0,
+  "amplitude": 0.25,
+  "failure": {
+    "xrun_every_blocks": null,
+    "disconnect_after_blocks": null
+  }
+}
+```
+
+### 9.3 Mock 采集完成定义
+
+- 每帧/块序号严格递增，PTS 单调不减。
+- 实时模式下长期速率在允许误差内，无持续漂移。
+- 非实时模式可快速生成固定数量数据，且结果可重复。
+- 一个固定 seed 下的输出 checksum 一致。
+- 错误注入的发生时机可预测，不使用不可控的全局随机数。
+
+## 10. 阶段 F：Mock 推理、预处理元数据与叠加契约
+
+### 10.1 现在就要实现的预处理数学
+
+即使暂时不调用 RGA/RKNN，letterbox 的几何变换和坐标还原也可完整实现并测试。
+
+对原图 `src_w × src_h` 和模型输入 `dst_w × dst_h`：
+
+```text
+scale = min(dst_w / src_w, dst_h / src_h)
+resized_w = round(src_w * scale)
+resized_h = round(src_h * scale)
+pad_x = (dst_w - resized_w) / 2
+pad_y = (dst_h - resized_h) / 2
+```
+
+必须将实际使用的 `resized_w/resized_h/pad_left/pad_top`保存在 `TransformMetadata`，不要在后处理时只凭理论 scale 重算，因为取整可能产生 1 像素差异。
+
+从模型输入坐标还原到原图：
+
+```text
+x_src = (x_model - pad_left) / scale
+y_src = (y_model - pad_top) / scale
+```
+
+还原后对坐标执行 clamp，确保落在 `[0, src_w)` 和 `[0, src_h)` 内。
+
+### 10.2 MockInferenceEngine
+
+Mock 推理不应随机输出框。建议两种模式：
+
+- `synthetic_target`：根据 MockVideoCapture 移动矩形的帧号公式返回准确检测框，可用于验证帧匹配和叠加。
+- `scripted`：从测试用 JSON 读取固定输出，可用于验证 NMS、置信度阈值和边界框。
+
+支持配置可控的 `latency_ms`，用于模拟 NPU 慢于视频采集的情况。
+
+### 10.3 结果时效契约
+
+Overlay 选择结果时依次判断：
+
+1. `DetectionBatch.frame_sequence <= current_frame.sequence`。
+2. 结果年龄 `current_frame.pts_us - source_pts_us` 不超过 `max_result_age_ms`。
+3. 如果配置为严格模式，只接受同一 `frame_sequence`。
+4. 无有效结果时输出原帧，不使用未初始化或任意旧结果。
+
+这套契约保留到真实 RKNN 实现后不变。
+
+### 10.4 必测内容
+
+- 16:9、4:3、1:1 和竖图的 letterbox 及坐标还原。
+- 框位于四个边界和 padding 内时的 clamp。
+- 30 FPS 采集 + 100 ms Mock 推理时，推理队列容量不超上限。
+- 帧 10 的检测结果不会被应用到帧 9。
+- 超过 `max_result_age_ms` 的结果会被丢弃并计数。
+
+## 11. 阶段 G：Checksum Encoder、PacketRouter 与 Null Sink
+
+### 11.1 为什么需要 Checksum Encoder
+
+没有 MPP/FFmpeg 时不能生成真实 H.264/AAC，但可将“帧到 packet”的契约做完整。Checksum Encoder 接收帧，生成包含以下信息的测试 packet：
+
+- 输入 sequence 和 PTS。
+- 数据长度。
+- 数据 checksum/hash。
+- 模拟 codec 和 key-frame 标志。
+
+它不宣称输出是真实视频码流，但能验证 packet 顺序、时间戳、分发、Flush 和关闭语义。
+
+### 11.2 PacketRouter
+
+- 为每个 sink 维护独立有界队列或同步分发策略。
+- 某个慢 sink 不能无限拖住其他 sink。
+- packet buffer 共享时按不可变数据处理，sink 不得就地修改。
+- 每个 sink 单独统计接收、丢弃、写失败和重连次数。
+
+### 11.3 NullPacketSink
+
+Null sink 不是空函数，应验证：
+
+- 同一 stream 的 DTS/PTS 是否满足配置的单调规则。
+- 视频/音频 packet 计数是否与输入和丢弃计数相符。
+- buffer 不为空，codec/time base 为有效值。
+- `Flush()` 后不再接受新 packet。
+
+可选增加 `JsonLinePacketSink`，将 packet 元数据写入 JSON Lines，便于人工检查和测试脚本比对。
+
+## 12. 阶段 H：配置、日志、指标和健康监测
+
+### 12.1 配置
+
+`config/mock.json` 必须是最终 `rk3568.json` 的同构子集，不要为 Mock 单独设计完全不同的配置格式。
+
+配置流程：
+
+1. 解析 JSON。
+2. 应用明确默认值。
+3. 执行字段类型/范围校验。
+4. 执行跨字段语义校验。
+5. 输出隐去敏感字段后的最终有效配置。
+
+配置建议包含 `schema_version`，为后续配置迁移留出空间。
+
+### 12.2 日志
+
+每条结构化日志建议有：
+
+```text
+timestamp, level, module, event, message,
+sequence(optional), pts_us(optional), native_code(optional),
+retryable(optional), recovery_action(optional)
+```
+
+不得每帧输出 info 日志。每帧信息只能在 trace/debug 级别且有采样或限速，否则真实 30 FPS 时会造成 I/O 干扰。
+
+### 12.3 指标
+
+本阶段先实现：
+
+```text
+mock_video_frames_total
+mock_audio_frames_total
+inference_requests_total
+inference_results_total
+encoded_video_packets_total
+encoded_audio_packets_total
+dropped_frames_total{queue=...}
+queue_depth{queue=...}
+queue_high_watermark{queue=...}
+stage_latency_us{stage=...}
+errors_total{module=...,category=...}
+recoveries_total{module=...}
+process_uptime_seconds
+process_memory_bytes
+```
+
+延迟统计不建议保留所有样本。可使用固定窗口、分桶 histogram 或有界环形缓冲区计算 P50/P95/P99。
+
+### 12.4 健康监测
+
+每个 worker 更新：
+
+- 最近一次成功处理时间。
+- 最近一次错误时间与错误类别。
+- 连续错误次数。
+- 当前状态：`STARTING/RUNNING/DEGRADED/RECONNECTING/STOPPING/STOPPED/FAILED`。
+
+健康线程定期读取这些快照，但不直接在监控线程释放业务模块资源。它向 Application 发送受控的恢复/停止命令，避免多个线程同时重建同一设备。
+
+## 13. 阶段 I：Application 管道组装和生命周期
+
+### 13.1 组装
+
+Application 通过工厂根据配置创建后端：
+
+```cpp
+std::unique_ptr<IVideoCapture> CreateVideoCapture(const Config&);
+std::unique_ptr<IAudioCapture> CreateAudioCapture(const Config&);
+std::unique_ptr<IInferenceEngine> CreateInferenceEngine(const Config&);
+std::unique_ptr<IVideoEncoder> CreateVideoEncoder(const Config&);
+std::unique_ptr<IAudioEncoder> CreateAudioEncoder(const Config&);
+std::vector<std::unique_ptr<IPacketSink>> CreatePacketSinks(const Config&);
+```
+
+当配置请求一个编译时未启用的后端时，程序必须在启动早期明确报错，而不是悄悄 fallback 到 Mock。Mock 只能在配置显式选择时使用。
+
+### 13.2 线程建议
+
+本阶段可用以下 worker 验证最终并发模型：
+
+```text
+video_capture_worker
+inference_worker
+video_encode_worker
+audio_capture_worker
+audio_encode_worker
+packet_router_worker / sink workers
+health_monitor_worker
+```
+
+若后续真实测试证明线程过多，可合并某些轻量阶段，但数据契约和指标边界保持不变。
+
+### 13.3 启动回滚
+
+启动每个步骤后记录已成功的资源。任一后续步骤失败时，按反向顺序停止已启动部分。不得依赖进程强制退出来释放资源。
+
+### 13.4 停止定义
+
+停止过程必须可重入或至少幂等：SIGTERM、内部致命错误和主线程正常结束同时请求停止时，只有一个调度者执行真正的 shutdown。
+
+建议状态：
+
+```text
+CREATED -> INITIALIZING -> RUNNING -> STOPPING -> STOPPED
+                     \-> FAILED ----/
+```
+
+禁止从 `STOPPING` 重新进入 `RUNNING`。如果将来需要局部重启设备，在设备模块的状态机内完成，不重用整个 Application 的启停状态。
+
+## 14. 阶段 J：自动化测试和当前验收
+
+### 14.1 单元测试清单
+
+#### Common
+
+- Buffer 构造、移动、共享和边界。
+- Result/Error 传递与底层错误码保留。
+- Rational/time-base 转换和溢出边界。
+- ManualClock 确定性。
+
+#### Queue
+
+- FIFO、四种溢出策略、超时、取消、Close/Drain/Abort。
+- 多线程竞争和指标计数。
+
+#### Config
+
+- 合法最小配置、完整配置、未知字段策略。
+- 错误类型、超范围、互相矛盾的配置。
+- 请求未编译后端时明确失败。
+
+#### Mock capture
+
+- 固定 sequence 的图案 checksum。
+- 视频帧数、尺寸、stride、格式和 PTS。
+- 音频样本数、正弦波相位连续、幅度范围和 PTS。
+- 错误注入的确定性。
+
+#### Vision
+
+- letterbox 参数与坐标往返转换。
+- Mock 目标框与视频中移动矩形一致。
+- 结果帧序号、时效和丢弃规则。
+
+#### Lifecycle
+
+- 每个启动步骤失败时的反向回滚。
+- 启动中取消、运行中停止、重复停止。
+- 队列阻塞中停止时所有 worker 可退出。
+
+### 14.2 集成测试场景
+
+| 场景 | 配置 | 必须验证 |
+|---|---|---|
+| 正常流水线 | 720p/30 FPS，48 kHz，Mock inference 10 ms | 输入/输出计数合理，PTS 单调，0 致命错误 |
+| 慢推理 | inference 100 ms，队列容量 1 | 采集仍接近 30 FPS，只保留新帧，内存有界 |
+| 慢视频 sink | sink 每包延迟 100 ms | 丢帧策略生效，音频支路不被无限拖延 |
+| 视频断开 | 指定帧数后失败 | 进入恢复/降级，错误和恢复指标正确 |
+| 音频 XRUN | 每 N 块注入一次 | Recover 被调用，无死锁，计数正确 |
+| Sink 失败 | 连续写失败 | 其他 sink 继续或系统按配置降级 |
+| 立即停止 | 启动后随机 0–5 s 停止 | 不崩溃，全部线程在超时内退出 |
+
+### 14.3 稳定性测试
+
+首次要求 30 分钟，之后提升到 2 小时。测试中每秒采集：
+
+- RSS/虚拟内存。
+- 每个队列的 depth/high-watermark/drop。
+- 各阶段 FPS 和 P95 延迟。
+- 线程是否持续有进展。
+- 总错误数、恢复数和降级时间。
+
+不以“进程没崩”作为唯一标准。通过条件：
+
+- 内存在预热后只在可解释的有界区间波动，无持续线性增长。
+- 队列深度不超容量，高水位和丢弃数与注入负载一致。
+- 无 worker 长时间无进展。
+- 停止耗时不超过配置阈值，不依赖强制 kill。
+
+## 15. 现在可做的 RK3568 板级验证
+
+若板卡已能进入 Linux，即使没有外设，仍可完成以下验证。
+
+### 15.1 原生编译和运行
+
+- 在 aarch64 上编译 Mock 版，验证无 x86 假设。
+- 检查 `std::atomic`、字节序、对齐和类型尺寸相关测试。
+- 运行 720p Mock 图像生成，获得 CPU 和内存基线。
+
+### 15.2 资源限制测试
+
+在 systemd 服务或 shell 中限制可用资源，验证系统不依赖无限内存：
+
+- 降低进程可用内存后，队列和 Buffer 分配失败能转换为可诊断错误。
+- 人为降低 CPU 配额或增加 Mock 延迟，验证背压。
+- 记录板卡温度和是否发生降频，但不将 Mock 生成器性能当作真实视频性能。
+
+### 15.3 信号和 systemd
+
+- 在前台运行时验证 Ctrl+C/SIGINT。
+- 使用 `kill -TERM <pid>` 验证 SIGTERM。
+- 创建初版 `rkav-gateway.service`，验证 `Restart=on-failure`、工作目录、配置路径和日志。
+- 区分正常停止和崩溃退出码，避免 systemd 在用户正常停止时不断重启。
+
+## 16. 建议的 Mock 运行配置
+
+```json
+{
+  "schema_version": 1,
+  "runtime": {
+    "mode": "mock",
+    "log_level": "info",
+    "shutdown_timeout_ms": 5000,
+    "run_duration_seconds": 0
+  },
+  "video": {
+    "backend": "mock",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "format": "RGB888",
+    "queue_capacity": 4,
+    "overflow_policy": "drop_oldest",
+    "pattern": "moving_box",
+    "realtime": true
+  },
+  "audio": {
+    "backend": "mock",
+    "sample_rate": 48000,
+    "channels": 1,
+    "format": "S16_LE",
+    "frame_duration_ms": 20,
+    "queue_capacity_ms": 300,
+    "signal": "sine",
+    "frequency_hz": 1000.0,
+    "amplitude": 0.25,
+    "realtime": true
+  },
+  "inference": {
+    "backend": "mock",
+    "mode": "synthetic_target",
+    "latency_ms": 20,
+    "queue_capacity": 1,
+    "overflow_policy": "keep_latest",
+    "max_result_age_ms": 200
+  },
+  "video_encoder": {
+    "backend": "checksum",
+    "mock_keyframe_interval": 30
+  },
+  "audio_encoder": {
+    "backend": "checksum"
+  },
+  "outputs": [
+    {
+      "type": "null",
+      "validate_timestamps": true
+    },
+    {
+      "type": "jsonl",
+      "enabled": false,
+      "path": "./out/packets.jsonl"
+    }
+  ],
+  "monitoring": {
+    "metrics_interval_ms": 1000,
+    "health_interval_ms": 500,
+    "worker_stall_timeout_ms": 3000
+  }
+}
+```
+
+`run_duration_seconds=0` 表示运行到信号或致命错误；测试中可设为固定时间以获得确定退出。
+
+## 17. 硬件到货后的替换路径
+
+本阶段代码必须支持如下渐进替换，每次只替换一个后端。
+
+### 17.1 摄像头到货
+
+```text
+MockVideoCapture
+    -> V4L2VideoCapture
+其他模块仍使用 Mock/Checksum
+```
+
+先独立完成：
+
+1. 枚举设备与格式。
+2. 通过 `VIDIOC_S_FMT`/`VIDIOC_S_PARM` 协商，再读回实际参数。
+3. MMAP + QBUF/STREAMON + poll + DQBUF/QBUF。
+4. 超时、EINTR、EAGAIN、设备断开和重开。
+5. 将采集帧注入已有有界队列，不改后续推理和输出模块。
+
+### 17.2 麦克风到货
+
+```text
+MockAudioCapture
+    -> AlsaAudioCapture
+其他模块不变
+```
+
+先用 `arecord` 验证设备，再在程序中实现 open、hw params、prepare、read/recover。将 ALSA 的实际 period 和 buffer 参数记录到启动日志。
+
+### 17.3 RKNN Runtime 可用
+
+```text
+MockInferenceEngine
+    -> RknnInferenceEngine
+Mock/CPU preprocessing 先保留
+```
+
+先对固定静态图像对比 PC 参考结果，再接入视频帧。这时 `DetectionBatch`、帧号匹配、结果时效和 overlay 契约已经完成，不应重写。
+
+### 17.4 MPP/RGA 可用
+
+```text
+CPU/FFmpeg baseline -> RGA preprocessing
+Checksum/FFmpeg encoder -> MPP H.264 encoder
+```
+
+每次替换必须保留原实现作为对照和 fallback，对比：
+
+- 输出图像/codec 正确性。
+- CPU 占用率。
+- 阶段平均和 P95 延迟。
+- 额外内存拷贝次数。
+- 长时间温度与降频。
+
+### 17.5 MP4/RTSP 接入
+
+```text
+NullPacketSink / JsonLinePacketSink
+    -> FFmpegMp4Recorder
+    -> RtspPublisher
+```
+
+PacketRouter 的接口不变。先只录 MP4，用 `ffprobe` 验证 PTS/时长/音画同步；再增加 RTSP，避免封装与网络问题同时出现。
+
+## 18. 为后续优化预留，但现在不过度设计
+
+### 18.1 内存优化
+
+现在保持 `VideoFrame` 的 buffer 抽象和内存类型字段，但先使用 CPU 内存。等实测证明拷贝是瓶颈后，按以下顺序优化：
+
+1. 复用普通 Buffer Pool。
+2. V4L2 MMAP 到应用 buffer 的拷贝合并/减少。
+3. RGA/MPP 间导入共享 buffer。
+4. 最后考虑 V4L2 -> RGA -> MPP/RKNN 的 DMA-BUF 链路。
+
+每次优化都必须保留旧路径的回归测试，并记录指标改善，否则不合并。
+
+### 18.2 调度优化
+
+现在保持 worker 边界和指标。后续可根据性能数据：
+
+- 合并轻量处理阶段。
+- 设置线程亲和性或调度优先级。
+- 调整推理抽帧率和队列容量。
+
+不在没有实测数据时提前绑核或使用实时调度策略。
+
+### 18.3 模型优化
+
+`IInferenceEngine` 和 `ModelInfo` 应支持查询输入尺寸、数据类型、layout、通道顺序和量化参数。后续替换 YOLOv5n/YOLOv8n、输入尺寸或量化模型时，不需改采集和输出链路。
+
+## 19. 开发顺序和里程碑
+
+### M0：环境和空工程
+
+产物：CMake 目标、特性开关、可执行程序、测试入口、版本输出。
+
+通过标准：PC 与板卡至少一个环境可干净编译，不依赖 Rockchip 库。
+
+### M1：公共核心
+
+产物：Buffer、Result/Error、Clock、Frame/Packet 类型、BoundedQueue、Config。
+
+通过标准：所有单元测试通过，ASan/UBSan 无报错。
+
+### M2：Mock 数据源
+
+产物：30 FPS 测试图、48 kHz 正弦波、确定性错误注入。
+
+通过标准：虚拟时钟测试结果确定，实时模式 30 分钟无持续漂移。
+
+### M3：多线程管道
+
+产物：Mock inference、Checksum encoders、PacketRouter、Null sink、Application 启停。
+
+通过标准：正常、慢推理、慢 sink 和中途停止场景全部通过。
+
+### M4：可观测性和故障恢复
+
+产物：结构化日志、指标、健康状态、错误注入测试。
+
+通过标准：错误有可搜索的 module/event/category，指标与测试注入数量一致。
+
+### M5：RK3568 Mock 长稳
+
+产物：板卡环境基线、systemd 服务、30 分钟和 2 小时报告。
+
+通过标准：内存不线性增长，无死锁，SIGTERM 可有界退出，异常退出可被 systemd 按策略重启。
+
+## 20. 本阶段总验收清单
+
+以下项目全部满足后，才能认为“只有板子阶段”完成：
+
+- [ ] 代码目录与整体架构一致，Mock 是正式后端而非临时脚本。
+- [ ] 没有 RKNN/RGA/MPP/ALSA/V4L2 开发包也可编译 Mock 版。
+- [ ] 配置中可选择后端，请求未编译后端时明确失败。
+- [ ] Mock 视频和音频格式、速率、PTS 和内容可验证。
+- [ ] 所有跨线程队列有界，溢出策略明确并有单元测试。
+- [ ] 慢推理不会拖死采集，丢帧数和队列高水位可观测。
+- [ ] 音频和视频使用同一单调时间域，不使用 wall clock 同步。
+- [ ] Mock 检测结果携带原帧序号与 PTS，过期结果不会被错误叠加。
+- [ ] Application 能处理启动中失败、运行中错误、SIGINT/SIGTERM 和重复停止。
+- [ ] 没有 detached thread，所有 worker 均有明确所有者并被 `join`。
+- [ ] Checksum Encoder 和 Null sink 能验证 packet 数量、顺序和时间戳。
+- [ ] 单元测试、Mock 集成测试全部通过。
+- [ ] PC 上 ASan/UBSan 构建通过（工具链可用时）。
+- [ ] RK3568 Linux 可用时，在板上编译/运行同一 Mock 管道。
+- [ ] 30 分钟 Mock 稳定性测试通过，之后完成 2 小时测试。
+- [ ] 保留运行配置、版本信息、指标摘要和停止原因，使测试可重复。
+
+## 21. 最重要的延续性约束
+
+后续硬件完善时，新增真实后端必须遵守以下规则：
+
+1. 不删除 Mock 后端，它们是日后回归测试和 CI 的基础。
+2. 不为了适配某个摄像头或 SDK 而向通用数据类型塞入大量专用 handle；使用已预留的平台内存描述层。
+3. 不让业务管道直接包含 RKNN/MPP/RGA 头文件；依赖留在具体后端 target 中。
+4. 每接入一个真实后端，先运行现有 Mock 测试，再运行新硬件测试，两者都通过才进入下一模块。
+5. 任何性能优化都要有优化前后对比，且不得降低错误可诊断性、停止可控性和输出正确性。
+
+按本文档完成的代码不是一次性 Demo，而是最终完整系统的第一个可测试、可演进版本。

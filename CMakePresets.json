@@ -1,0 +1,89 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "RKAV_ENABLE_MOCK": "ON",
+        "RKAV_WITH_V4L2": "OFF",
+        "RKAV_WITH_ALSA": "OFF",
+        "RKAV_WITH_RKNN": "OFF",
+        "RKAV_WITH_RGA": "OFF",
+        "RKAV_WITH_MPP": "OFF"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug mock build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "RKAV_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "asan",
+      "inherits": "debug",
+      "displayName": "Debug build with ASan and UBSan",
+      "cacheVariables": {
+        "RKAV_ENABLE_ASAN": "ON",
+        "RKAV_ENABLE_UBSAN": "ON"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release mock build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "RKAV_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "cross-aarch64-static",
+      "inherits": "base",
+      "displayName": "Static Linux/aarch64 build for legacy Buildroot",
+      "toolchainFile": "${sourceDir}/cmake/Toolchains/aarch64-linux-gnu-static.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "RKAV_BUILD_TESTS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "asan", "configurePreset": "asan" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "cross-aarch64-static", "configurePreset": "cross-aarch64-static" }
+  ],
+  "testPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
