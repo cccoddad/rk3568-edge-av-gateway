@@ -8,8 +8,8 @@
 Buildroot 板卡”的完整实现、证据和后续计划。
 
 本阶段没有接入摄像头、麦克风、RKNN、RGA 或 MPP。已经证明的是：现有 C++20 Mock
-管道可以交叉编译成 Linux ARM64 程序，部署到旧版 Buildroot，并完成配置校验和 10 秒双流
-运行。真实硬件后端仍需逐个实现。
+管道可以交叉编译成 Linux ARM64 程序，部署到旧版 Buildroot，并完成配置校验、30 项板端测试、
+信号退出和 10 分钟双流长稳。真实硬件后端仍需逐个实现。
 
 ## 2. 板卡环境识别
 
@@ -103,7 +103,7 @@ ELF 64-bit LSB executable, ARM aarch64, statically linked
 - GoogleTest 的构建后发现与源码扫描登记。
 - “构建成功”与“目标机测试成功”是两份不同证据。
 
-### 3.4 串口、直连网口与 SSH 部署链路
+### 3.4 串口、直连网口与 SSH 故障诊断
 
 实际建立的控制链路：
 
@@ -115,12 +115,15 @@ USB 串口 COM5，1500000 8-N-1
 Windows 有线网卡 192.168.50.1/24
     -> ping 192.168.50.2
     -> TCP 22 端口检查
-    -> SecureCRT SSH2 / scp
+    -> Dropbear 监听 22 端口，但 SSH banner 握手仍超时
+    -> 当前继续使用 SecureCRT 串口控制
+    -> 小文件可由板卡通过 HTTP/wget 从 Windows 下载
 ```
 
-串口不依赖 IP，适合首次启动、网络配置和故障恢复；SSH 依赖 IP 和 22 端口，适合日常操作
-和传输文件。PowerShell 的 `ping` 证明三层 IP 可达，`Test-NetConnection -Port 22` 证明 SSH
-服务端口可达。
+串口不依赖 IP，适合首次启动、网络配置和故障恢复。PowerShell 的 `ping` 证明三层 IP 可达，
+`Test-NetConnection -Port 22` 只证明 TCP 端口可达，不能证明 SSH 协议握手成功。板端 Dropbear
+主服务和独立 2222 端口诊断服务都能接受来自 `192.168.50.1` 的 TCP 连接，但客户端在认证前等待
+banner 超时，因此当前不能把 SSH/SCP 记为已验收链路。诊断服务已经关闭，只保留原 Dropbear 服务。
 
 静态 IP 已写入 `/etc/network/interfaces`：
 
@@ -136,7 +139,7 @@ iface eth0 inet static
 
 ### 3.5 板端 Mock 管道实测
 
-ARM64 静态程序通过 SCP 上传到 `/root/rkav`，板端已执行：
+ARM64 静态程序已部署到 `/root/rkav`，板端已执行：
 
 ```bash
 ./rkav-gateway --validate-config --config mock.json
@@ -162,8 +165,60 @@ ARM64 静态程序通过 SCP 上传到 `/root/rkav`，板端已执行：
 延迟样例：Mock 推理 p95 约 20.7 ms，Checksum 视频编码 p95 约 12.4 ms，Checksum 音频编码
 p95 约 57 us。这些是当前 Mock 工作负载的板端基线，不代表 RKNN、MPP 或真实音视频性能。
 
-当前留存输出没有包含 `rkav_tests` 的最终 `[ PASSED ] 30 tests` 汇总，因此文档只声明网关
-运行通过。板端 30 项测试仍需重新执行并保存日志。
+### 3.6 Buildroot 板端补充验收
+
+随后完成了原总结中缺失的测试、信号和长稳证据。
+
+板端 `rkav_tests` 结果：
+
+```text
+[==========] 30 tests from 12 test suites ran. (1782 ms total)
+[  PASSED  ] 30 tests.
+exit_code=0
+```
+
+测试日志中出现的 XRUN、断连和 fatal 信息来自测试用例主动注入的故障；最终 30 项全部通过，不能将
+这些预期日志误判为板卡故障。
+
+分别向无限运行模式发送 SIGTERM 和 SIGINT，两次结果均为：
+
+| 项目 | SIGTERM | SIGINT |
+|---|---:|---:|
+| 退出码 | 0 | 0 |
+| 秒级退出耗时 | 0 秒 | 0 秒 |
+| 停止原因 | `signal` | `signal` |
+| 错误、丢弃 | 0 | 0 |
+| 停止后队列 | 已关闭、已排空 | 已关闭、已排空 |
+
+为兼容缺少 systemd 和完整 GNU 工具的旧 Buildroot，新增
+`tools/soak_test_buildroot.sh`。脚本只依赖 BusyBox、`/proc` 和 `/sys`，采集进程 RSS、线程数、
+CPU 占用、SoC 温度与 CPU 频率，并在温度达到 85 摄氏度时终止测试。ARM64 产物打包脚本会将
+它与 `rkav-gateway`、`rkav_tests` 和 `mock.json` 一起输出。
+
+一次 600 秒、10 秒采样间隔的 Mock 长稳结果：
+
+| 指标 | 实测结果 |
+|---|---:|
+| 脚本退出码 | 0 |
+| 热保护触发 | 0 |
+| CSV | 1 行表头 + 60 个样本 |
+| RSS | 启动样本 2932 kB，稳定后 4376 kB |
+| 线程数 | 9，保持稳定 |
+| 进程 CPU | 预热后约 82%～86%，100% 代表占满一个核心 |
+| SoC 温度 | 45.0～46.1 摄氏度 |
+| CPU 频率 | 观察到 1.104 GHz 和 1.416 GHz |
+| 音频捕获/编码 | 30001 / 30001 |
+| 视频捕获/编码 | 18001 / 18001 |
+| 推理请求/结果 | 18001 / 18001 |
+| 路由/消费包 | 48002 / 48002 |
+| 错误、恢复、过期检测 | 0 / 0 / 0 |
+| 所有队列丢弃 | 0 |
+| 停止后队列 | `closed=true,size=0` |
+| 停止原因 | `run_duration_elapsed` |
+
+延迟 p95 为：Mock 推理 20.636 ms、Checksum 视频编码 12.361 ms、Checksum 音频编码 57 us。
+这些数字证明当前 Mock 管道在 RK3568 CPU 上的基线稳定性，不代表真实摄像头、麦克风、MPP、
+RKNN/NPU 或产品级长时间运行性能。
 
 ## 4. 本阶段解决了什么
 
@@ -174,15 +229,14 @@ p95 约 57 us。这些是当前 Mock 工作负载的板端基线，不代表 RKN
 3. 建立了可重复的 ARM64 静态交叉编译入口。
 4. 解决了交叉编译下 GoogleTest 不能在构建机执行的问题。
 5. 使用 `file` 在部署前校验目标架构和链接方式。
-6. 建立串口恢复、网线直连、SSH 控制和 SCP 部署链路。
-7. 在真实 RK3568 上取得配置校验、吞吐、延迟、队列和正常停止证据。
+6. 建立串口恢复和网线直连链路，并明确隔离 SSH 协议握手故障。
+7. 在真实 RK3568 上取得配置校验、30 项测试、信号退出、吞吐、延迟、队列和 10 分钟长稳证据。
 
 ## 5. 当前边界与遗留风险
 
-- 板端 30 项 GoogleTest 结果尚未形成可留档证据。
-- SIGINT、SIGTERM 进程级验收尚未在当前 Buildroot 路线上留档。
-- 尚未执行 30 分钟和 2 小时长稳，RSS、CPU、温度趋势未知。
-- 板卡 RTC 节点不可用，日志墙上时间为 1970 年；内部单调 PTS 不受影响，但证据时间不可靠。
+- 10 分钟 Mock 长稳已经通过，但尚未进行 30 分钟、2 小时或产品级长期运行。
+- 板卡 RTC 初始为 1970 年，本次通过 `date -s` 临时设置到 2026-08-21；断电后的持久性未解决。
+- Dropbear 监听端口并接受 TCP 连接，但 SSH banner 握手超时，当前仍以串口为主。
 - 厂商 `reboot` 流程疑似卡在 `usbdevice stop`，需定位对应初始化脚本。
 - 当前 Buildroot 没有 systemd，不能使用现有 systemd unit 完成该项验收。
 - 静态链接适合当前纯 C++ Mock 程序；RKNN、RGA、MPP 等厂商库通常必须使用 SDK 对应的
@@ -191,23 +245,13 @@ p95 约 57 us。这些是当前 Mock 工作负载的板端基线，不代表 RKN
 
 ## 6. 接下来怎么做
 
-### 6.1 先完成 Buildroot 版 M5 基线
+### 6.1 完成剩余板卡管理项
 
 1. 冷启动板卡，验证 `/etc/network/interfaces` 中的静态 IP 是否自动生效。
-2. 修正系统时间或记录“RTC 不可用”，避免后续日志全部显示 1970 年。
-3. 执行并保存板端测试：
-
-   ```bash
-   cd /root/rkav
-   ./rkav_tests --gtest_color=no > tests.log 2>&1
-   echo $? > tests.exit_code
-   tail -n 10 tests.log
-   ```
-
-4. 分别发送 SIGINT、SIGTERM，检查停止原因、退出码、队列排空和最大退出耗时。
-5. 编写或适配 BusyBox `/proc` 版本的长稳采样脚本，执行 30 分钟 Mock 长稳。
-6. 记录 RSS、CPU、温度、错误数、队列高水位和丢弃数。
-7. 定位 `usbdevice stop` 卡顿；在解决前，关机前先 `sync` 并保留串口日志。
+2. 明确 RTC 是否有电池和可写节点；解决前每次冷启动后校时。
+3. SSH 不是接入真实硬件的前置条件，可单独调查 banner 超时，不阻塞主线。
+4. 定位 `usbdevice stop` 卡顿；在解决前，关机前先 `sync` 并保留串口日志。
+5. 30 分钟和 2 小时 Mock 长稳推迟到下一里程碑前执行，当前 10 分钟基线已经足够进入硬件盘点。
 
 ### 6.2 获取粤嵌配套 SDK
 
@@ -235,10 +279,10 @@ V4L2 摄像头 -> ALSA 麦克风 -> RKNN -> RGA -> MPP H.264 -> AAC -> MP4 -> RT
 我拿到的是粤嵌 RK3568 教学板，系统是 Buildroot 2018.02 和 Linux 4.19，没有 CMake、G++
 和包管理器。为了保留厂商 BSP，我没有立刻刷 Ubuntu，而是在 x86_64 Ubuntu 中建立 ARM64
 静态交叉编译。CMake toolchain 显式区分目标编译器和 target sysroot，交叉构建时把 GoogleTest
-从运行时发现改成源码登记，产物再放到板上执行。通过串口配置直连网络，使用 SSH/SCP 部署，
-最终在 RK3568 上完成 10 秒 Mock 双流运行：约 30 FPS 视频、每秒 50 个音频块、801 个包
-完整路由消费、错误和丢弃均为 0，停止后队列全部排空。下一步是补齐板端测试、信号和长稳
-证据，再用厂商 SDK 逐个接入 V4L2、ALSA、RKNN 和 MPP。
+从运行时发现改成源码登记，产物再放到板上执行。通过串口配置直连网络，在 RK3568 上完成
+30 项板端测试、SIGINT/SIGTERM 优雅退出和 10 分钟 Mock 双流长稳：48002 个包完整路由消费，
+错误和丢弃均为 0，RSS 稳定在约 4.3 MiB，SoC 温度约 45～46 摄氏度，停止后队列全部排空。
+SSH 端口可达但协议握手仍待处理。下一步使用厂商 SDK 逐个接入 V4L2、ALSA、RKNN 和 MPP。
 
 ## 8. 相关文档
 
