@@ -149,10 +149,13 @@ git rev-parse origin/main
 | 提交邮箱 | `202125436+cccoddad@users.noreply.github.com` |
 | 敏感信息检查 | 未发现私钥、Token、密码文件或疑似凭据 |
 | 大文件检查 | 未发现 5 MB 以上的待提交文件 |
-| 首次提交 | 以 `git log --oneline --reverse` 第一条的实测结果为准 |
-| 远端验证 | 以 `git status` 和 `git ls-remote` 的实测结果为准 |
+| 上传前验证 | Windows 构建成功，配置校验成功，30/30 项测试通过 |
+| 首次提交 | `05db5309da39a422495df833225e2a15a23b9f50` |
+| 首次推送 | `main -> origin/main`，已成功建立跟踪关系 |
+| 首次远端验证 | 本地 `main`、`origin/main` 和 GitHub `refs/heads/main` 均指向 `05db5309...` |
 
-提交号由提交内容计算，提交前无法预先填写。任何时候都可取得实际记录：
+提交号由提交内容计算，提交前无法预先填写。本表已在首次上传成功后填入实测结果。任何时候
+都可重新取得当前实际记录：
 
 ```powershell
 git log --oneline --decorate --all
