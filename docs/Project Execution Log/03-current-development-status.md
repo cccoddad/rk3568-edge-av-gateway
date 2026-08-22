@@ -1,6 +1,6 @@
 # 当前开发状态与验收记录
 
-更新日期：2026-08-21
+更新日期：2026-08-22
 
 ## 1. 已完成范围
 
@@ -45,22 +45,26 @@ ctest --test-dir C:/Users/CC/.cache/rkav-build/debug --output-on-failure --timeo
 
 - 已识别板端为 aarch64、Buildroot 2018.02、Linux 4.19，而不是 Ubuntu/systemd。
 - 已在 Ubuntu 虚拟机生成 ARM64 静态 `rkav-gateway` 和 `rkav_tests`。
-- 已通过串口配置电脑直连网络，并使用 SSH/SCP 部署程序。
-- 板端配置校验通过；10 秒 Mock 双流运行正常结束，801 个包全部消费，错误和丢弃均为 0。
-- 本次留存输出尚未包含板端 `rkav_tests` 的 30 项最终汇总，因此不能声明板端测试已通过。
+- 已通过串口配置并在物理断电后的冷启动中验证电脑直连网络；板端静态 IP 为 `192.168.50.2/24`，
+  Windows 为 `192.168.50.1/24`，Windows 到板端 ping 4/4 成功。
+- 板端配置校验和 `rkav_tests` 均通过；`30 tests from 12 test suites`、退出码为 0。
+- SIGINT/SIGTERM 均已在 Linux 进程级验证，退出码为 0、停止原因是 `signal`，队列均排空。
+- 30 分钟与 2 小时 Mock 长稳均通过。2 小时结果为 RSS 稳定 4376 kB、9 个线程、温度约 45.6～46.7 C、
+  576003 个包完整路由消费、错误和队列丢弃均为 0。
+- Dropbear 的 TCP 22 已可达，但 OpenSSH 在 banner 阶段超时，当前不能宣称 SSH/SCP 已验收。
 
 详细证据见
 [Buildroot 交叉编译与 RK3568 上板阶段总结](../09-buildroot-cross-compile-and-board-bringup-summary.md)。
 
 ## 4. 尚未完成或尚未实机验证
 
-- 已记录架构、系统和内核；CPU、内存、温度和磁盘的完整基线仍需留档。
+- 板端完整的 CPU、内存和磁盘原始基线输出仍需归档；长稳期间的 RSS、CPU、温度和频率已留档。
 - 尚未执行 Linux ASan/UBSan；Windows MinGW 仅完成普通 Debug 测试。
 - Windows PATH 中没有原生 clang-format/clang-tidy；已用临时 clang-format 工具统一格式，
   GitHub Actions 的格式检查、clang-tidy、Debug、30 项测试和 ASan/UBSan 已全部通过。
-- 尚未执行 30 分钟和 2 小时 RK3568 长稳测试。
 - systemd 文件已提供，但当前 Buildroot 使用 SysV init；需另做 BusyBox 兼容启动脚本。
-- SIGINT/SIGTERM 处理代码已实现，仍需在 Linux 进程级集成测试中验证。
+- RTC 没有注册设备节点，内核中 `pcf8563@0x51` probe 失败；冷启动后必须临时校时。
+- 厂商 `reboot` 停在 `usbdevice stop` 附近的根因仍待定位；`poweroff` 已完成关机。
 - 进程 RSS/CPU 不在程序内部指标中，长稳脚本从操作系统侧采集。
 - V4L2、ALSA、RKNN、RGA、MPP、H.264、AAC、MP4、RTSP 都未实现。
 - 当前推理结果完成了时效统计和帧绑定，但尚无真实 OSD 像素叠加阶段。
@@ -70,7 +74,6 @@ ctest --test-dir C:/Users/CC/.cache/rkav-build/debug --output-on-failure --timeo
 
 ## 5. 下一阶段顺序
 
-1. 冷启动验证固定 IP，并定位 `reboot` 停在 `usbdevice stop` 的问题。
-2. 在板端运行 `rkav_tests`，保存退出码和 30 项汇总。
-3. 完成 SIGINT/SIGTERM、30 分钟长稳及 RSS、CPU、温度和队列指标留档。
-4. 获取当前 BSP 对应 SDK/sysroot，再新增 V4L2 后端，不改 `IVideoCapture` 和 Application 主链路。
+1. 获取当前 BSP 对应 SDK/sysroot、设备树和原理图，单独定位 RTC probe、SSH banner 与 `reboot` 风险。
+2. 等摄像头到位后新增 V4L2 后端，不改 `IVideoCapture` 和 Application 主链路。
+3. 通过同样的单变量流程接入 ALSA、RKNN、RGA、MPP 和真实输出。
