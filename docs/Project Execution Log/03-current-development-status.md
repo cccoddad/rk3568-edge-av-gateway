@@ -50,7 +50,7 @@ ctest --test-dir C:/Users/CC/.cache/rkav-build/debug --output-on-failure --timeo
 - 本次留存输出尚未包含板端 `rkav_tests` 的 30 项最终汇总，因此不能声明板端测试已通过。
 
 详细证据见
-[Buildroot 交叉编译与 RK3568 上板阶段总结](./09-buildroot-cross-compile-and-board-bringup-summary.md)。
+[Buildroot 交叉编译与 RK3568 上板阶段总结](../09-buildroot-cross-compile-and-board-bringup-summary.md)。
 
 ## 4. 尚未完成或尚未实机验证
 
