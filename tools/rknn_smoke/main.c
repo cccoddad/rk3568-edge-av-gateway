@@ -13,6 +13,7 @@ enum {
     RKAV_DEFAULT_ITERATIONS = 1,
     RKAV_MAXIMUM_ITERATIONS = 100000,
     RKAV_MAXIMUM_TENSOR_COUNT = 256,
+    RKAV_TOP_RESULT_COUNT = 5,
 };
 
 typedef struct {
@@ -80,6 +81,40 @@ static bool ReadModel(const char* path, RkavModel* model) {
     return true;
 }
 
+static bool ReadExactInput(const char* path, void* buffer, uint32_t expected_size) {
+    FILE* stream = fopen(path, "rb");
+    if (stream == NULL) {
+        fprintf(stderr, "error operation=open_input path=%s errno=%d\n", path, errno);
+        return false;
+    }
+    if (fseek(stream, 0L, SEEK_END) != 0) {
+        fprintf(stderr, "error operation=seek_input_end path=%s errno=%d\n", path, errno);
+        fclose(stream);
+        return false;
+    }
+    const long end_position = ftell(stream);
+    if (end_position < 0L || (unsigned long)end_position != (unsigned long)expected_size) {
+        fprintf(stderr,
+                "error operation=validate_input_size path=%s expected=%" PRIu32 " actual=%ld\n",
+                path, expected_size, end_position);
+        fclose(stream);
+        return false;
+    }
+    if (fseek(stream, 0L, SEEK_SET) != 0) {
+        fprintf(stderr, "error operation=seek_input_start path=%s errno=%d\n", path, errno);
+        fclose(stream);
+        return false;
+    }
+    const size_t bytes_read = fread(buffer, 1U, expected_size, stream);
+    const bool read_succeeded = bytes_read == expected_size && ferror(stream) == 0;
+    fclose(stream);
+    if (!read_succeeded) {
+        fprintf(stderr, "error operation=read_input path=%s bytes=%zu\n", path, bytes_read);
+        return false;
+    }
+    return true;
+}
+
 static void PrintDimensions(const rknn_tensor_attr* attribute) {
     for (uint32_t index = 0U; index < attribute->n_dims; ++index) {
         if (index != 0U) {
@@ -135,6 +170,46 @@ static uint64_t HashBytes(const void* data, size_t size) {
     return hash;
 }
 
+static void PrintTopResults(uint32_t iteration, uint32_t output_index, const float* values,
+                            size_t count) {
+    size_t top_indices[RKAV_TOP_RESULT_COUNT];
+    float top_values[RKAV_TOP_RESULT_COUNT];
+    for (size_t rank = 0U; rank < RKAV_TOP_RESULT_COUNT; ++rank) {
+        top_indices[rank] = SIZE_MAX;
+        top_values[rank] = -INFINITY;
+    }
+
+    for (size_t value_index = 0U; value_index < count; ++value_index) {
+        const float value = values[value_index];
+        if (!isfinite(value)) {
+            continue;
+        }
+        for (size_t rank = 0U; rank < RKAV_TOP_RESULT_COUNT; ++rank) {
+            const bool is_better = top_indices[rank] == SIZE_MAX || value > top_values[rank] ||
+                                   (value == top_values[rank] && value_index < top_indices[rank]);
+            if (!is_better) {
+                continue;
+            }
+            for (size_t shift = RKAV_TOP_RESULT_COUNT - 1U; shift > rank; --shift) {
+                top_indices[shift] = top_indices[shift - 1U];
+                top_values[shift] = top_values[shift - 1U];
+            }
+            top_indices[rank] = value_index;
+            top_values[rank] = value;
+            break;
+        }
+    }
+
+    for (size_t rank = 0U; rank < RKAV_TOP_RESULT_COUNT; ++rank) {
+        if (top_indices[rank] == SIZE_MAX) {
+            break;
+        }
+        printf("top_result iteration=%" PRIu32 " output=%" PRIu32
+               " rank=%zu class_index=%zu score=%.8g\n",
+               iteration, output_index, rank + 1U, top_indices[rank], (double)top_values[rank]);
+    }
+}
+
 static bool PrintOutputSummary(uint32_t iteration, const rknn_output* outputs,
                                uint32_t output_count) {
     for (uint32_t index = 0U; index < output_count; ++index) {
@@ -165,6 +240,7 @@ static bool PrintOutputSummary(uint32_t iteration, const rknn_output* outputs,
                " fnv1a64=0x%016" PRIx64 "\n",
                iteration, index, output->size, count, finite_count, (double)minimum,
                (double)maximum, mean, HashBytes(output->buf, output->size));
+        PrintTopResults(iteration, index, values, count);
     }
     return true;
 }
@@ -179,7 +255,7 @@ static void FreeInputBuffers(void** buffers, uint32_t count) {
     free(buffers);
 }
 
-static int Run(const char* model_path, uint32_t iterations) {
+static int Run(const char* model_path, uint32_t iterations, const char* input_path) {
     int status = 1;
     RkavModel model = {0};
     rknn_context context = 0U;
@@ -243,10 +319,26 @@ static int Run(const char* model_path, uint32_t iterations) {
         goto cleanup;
     }
 
+    if (input_path != NULL && counts.n_input != 1U) {
+        fprintf(stderr, "error operation=validate_raw_input_count expected=1 actual=%" PRIu32 "\n",
+                counts.n_input);
+        goto cleanup;
+    }
+
     for (uint32_t index = 0U; index < counts.n_input; ++index) {
         const rknn_tensor_attr* attribute = &input_attributes[index];
         if (attribute->size == 0U) {
             fprintf(stderr, "error operation=validate_input_size index=%" PRIu32 "\n", index);
+            goto cleanup;
+        }
+        if (input_path != NULL &&
+            (attribute->fmt != RKNN_TENSOR_NHWC || attribute->type != RKNN_TENSOR_INT8 ||
+             attribute->n_elems != attribute->size)) {
+            fprintf(stderr,
+                    "error operation=validate_raw_rgb_contract index=%" PRIu32
+                    " format=%s type=%s elements=%" PRIu32 " bytes=%" PRIu32 "\n",
+                    index, get_format_string(attribute->fmt), get_type_string(attribute->type),
+                    attribute->n_elems, attribute->size);
             goto cleanup;
         }
         input_buffers[index] = calloc(attribute->size, 1U);
@@ -255,12 +347,25 @@ static int Run(const char* model_path, uint32_t iterations) {
                     index, attribute->size);
             goto cleanup;
         }
+        if (input_path != NULL &&
+            !ReadExactInput(input_path, input_buffers[index], attribute->size)) {
+            goto cleanup;
+        }
         inputs[index].index = index;
         inputs[index].buf = input_buffers[index];
         inputs[index].size = attribute->size;
         inputs[index].pass_through = 0U;
-        inputs[index].type = attribute->type;
+        inputs[index].type = input_path == NULL ? attribute->type : RKNN_TENSOR_UINT8;
         inputs[index].fmt = attribute->fmt;
+        printf("input source=%s index=%" PRIu32 " bytes=%" PRIu32
+               " format=%s type=%s fnv1a64=0x%016" PRIx64,
+               input_path == NULL ? "zero" : "raw_rgb", index, inputs[index].size,
+               get_format_string(inputs[index].fmt), get_type_string(inputs[index].type),
+               HashBytes(inputs[index].buf, inputs[index].size));
+        if (input_path != NULL) {
+            printf(" path=%s", input_path);
+        }
+        putchar('\n');
     }
 
     for (uint32_t iteration = 1U; iteration <= iterations; ++iteration) {
@@ -323,8 +428,8 @@ cleanup:
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 2 || argc > 3) {
-        fprintf(stderr, "Usage: rknn-smoke <model.rknn> [iterations]\n");
+    if (argc < 2 || argc > 4) {
+        fprintf(stderr, "Usage: rknn-smoke <model.rknn> [iterations] [input.rgb]\n");
         return 2;
     }
     uint32_t iterations = RKAV_DEFAULT_ITERATIONS;
@@ -333,5 +438,6 @@ int main(int argc, char* argv[]) {
                 RKAV_MAXIMUM_ITERATIONS);
         return 2;
     }
-    return Run(argv[1], iterations);
+    const char* input_path = argc == 4 ? argv[3] : NULL;
+    return Run(argv[1], iterations, input_path);
 }
