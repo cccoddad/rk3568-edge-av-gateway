@@ -104,6 +104,9 @@ RK3568 M5 板端基线、Sanitizer、SIGTERM、长稳和 systemd 的完整验收
 真实绿联摄像头和麦克风的 VID/PID、格式、样本与持续采集证据见
 [UGREEN 2K USB 音视频设备验收](docs/11-ugreen-camera-and-microphone-validation.md)。
 
+与板端 Runtime 1.4.0 匹配的开发文件、独立 AArch64 冒烟程序和验收边界见
+[RKNN 1.4.0 独立冒烟测试](docs/15-rknn-runtime-smoke-test.md)。
+
 ## 目录说明
 
 | 路径 | 职责 |
