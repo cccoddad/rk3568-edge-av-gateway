@@ -93,3 +93,18 @@ LD_LIBRARY_PATH=/usr/lib rknn-smoke model.rknn 1 input-224x224-rgb.bin
 
 输入文件必须是紧密排列的 RGB888；对于 `224x224x3` 模型，文件大小必须严格等于 150528
 字节。冒烟程序不隐式猜测图片格式，也不会把 JPEG 压缩数据直接作为 tensor。
+
+## 7. 摄像头单帧预处理实测
+
+2026-08-26 在板端直接从绿联摄像头 `/dev/video9` 重新抓取当前画面：
+
+- 采集格式为 `1280x720 MJPEG`、30 FPS，单帧保存为
+  `/userdata/rkav/input/camera-1280x720.jpg`。
+- JPEG 文件约 60 KiB，MD5 为 `c594b6ee0911858b29d40164b94af4d3`，GStreamer 正确识别为
+  `image/jpeg, width=1280, height=720`。
+- 使用板端 GStreamer 完成 JPEG 解码、缩放和 RGB 转换；运行时打印 RGA API 1.3.2 信息。
+- 生成 `/userdata/rkav/input/camera-224x224-rgb.bin`，大小严格等于 150528 字节，SHA-256
+  为 `63135b732665225f0bcef32b472cd15e5548d95681fcd32e4e06d36b1f442bd0`。
+
+这一步证明真实摄像头 MJPEG 可以转换为当前 MobileNet 的输入尺寸和布局。它尚未证明这张画面
+已经进入 NPU；需要部署支持 RGB 文件参数的新版 `rknn-smoke` 后再完成单帧真实像素推理。
