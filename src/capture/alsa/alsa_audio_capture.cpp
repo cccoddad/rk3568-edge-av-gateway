@@ -156,8 +156,8 @@ Error PollError(int file_descriptor) {
     if (status.state == SNDRV_PCM_STATE_SUSPENDED) {
         return AlsaError(ErrorCategory::kXrun, "poll", "ALSA capture suspended", ESTRPIPE, true);
     }
-    return AlsaError(ErrorCategory::kIo, "poll", "ALSA device reported an unexpected poll error",
-                     0, true);
+    return AlsaError(ErrorCategory::kIo, "poll", "ALSA device reported an unexpected poll error", 0,
+                     true);
 }
 
 }  // namespace
@@ -339,8 +339,8 @@ Result<AudioFrame> AlsaAudioCapture::Read(std::stop_token stop) {
         if (read_frames < 0) {
             const auto positive_error = static_cast<unsigned long>(-(read_frames + 1)) + 1UL;
             if (positive_error > static_cast<unsigned long>(std::numeric_limits<int>::max())) {
-                return Result<AudioFrame>::Failure(AlsaError(
-                    ErrorCategory::kIo, "read_interleaved", "ALSA returned an invalid error"));
+                return Result<AudioFrame>::Failure(AlsaError(ErrorCategory::kIo, "read_interleaved",
+                                                             "ALSA returned an invalid error"));
             }
             const int native_code = static_cast<int>(positive_error);
             if (native_code == EAGAIN) {
@@ -364,9 +364,8 @@ Result<AudioFrame> AlsaAudioCapture::Read(std::stop_token stop) {
     }
 
     const TimestampUs pts_us = next_pts_us_;
-    const TimestampUs duration_us =
-        static_cast<TimestampUs>(capabilities_.samples_per_frame) * 1'000'000 /
-        capabilities_.sample_rate;
+    const TimestampUs duration_us = static_cast<TimestampUs>(capabilities_.samples_per_frame) *
+                                    1'000'000 / capabilities_.sample_rate;
     next_pts_us_ += duration_us;
     AudioFrame frame{sequence_++,
                      pts_us,
