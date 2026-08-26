@@ -9,6 +9,12 @@
 
 #include "rkav/capture/mock_audio_capture.h"
 #include "rkav/capture/mock_video_capture.h"
+#if RKAV_WITH_ALSA
+#include "rkav/capture/alsa_audio_capture.h"
+#endif
+#if RKAV_WITH_V4L2
+#include "rkav/capture/v4l2_video_capture.h"
+#endif
 #include "rkav/common/logger.h"
 #include "rkav/media/checksum_encoder.h"
 #include "rkav/output/sinks.h"
@@ -82,7 +88,7 @@ Result<void> Application::Start() {
 
     state_.store(ApplicationState::kRunning, std::memory_order_release);
     Logger::Instance().Log(LogLevel::kInfo, "application", "application_running",
-                           "mock audio-video pipeline is running");
+                           "audio-video pipeline is running");
     return Result<void>::Success();
 }
 
@@ -159,6 +165,16 @@ Result<void> Application::CreateAndOpenBackends() {
         audio_encoder_ = std::make_unique<ChecksumAudioEncoder>();
     }
 #endif
+#if RKAV_WITH_V4L2
+    if (config_.video.backend == "v4l2") {
+        video_capture_ = std::make_unique<V4L2VideoCapture>(clock_);
+    }
+#endif
+#if RKAV_WITH_ALSA
+    if (config_.audio.backend == "alsa") {
+        audio_capture_ = std::make_unique<AlsaAudioCapture>(clock_);
+    }
+#endif
     if (!video_capture_ || !audio_capture_ || !inference_ || !video_encoder_ || !audio_encoder_) {
         return Result<void>::Failure(
             AppError(ErrorCategory::kNotSupported, "create_backends",
@@ -170,11 +186,28 @@ Result<void> Application::CreateAndOpenBackends() {
     if (!video_opened) {
         return Result<void>::Failure(video_opened.error());
     }
+    Logger::Instance().Log(LogLevel::kInfo, "application", "video_backend_opened",
+                           "video capture backend opened with negotiated capabilities",
+                           {{"backend", config_.video.backend},
+                            {"device", config_.video.device},
+                            {"width", std::to_string(video_opened.value().width)},
+                            {"height", std::to_string(video_opened.value().height)},
+                            {"fps", std::to_string(video_opened.value().fps)},
+                            {"format", ToString(video_opened.value().format)}});
     auto audio_opened = audio_capture_->Open(config_.audio);  // 音频后端打开/协商结果。
     if (!audio_opened) {
         video_capture_->Close();
         return Result<void>::Failure(audio_opened.error());
     }
+    Logger::Instance().Log(
+        LogLevel::kInfo, "application", "audio_backend_opened",
+        "audio capture backend opened with negotiated capabilities",
+        {{"backend", config_.audio.backend},
+         {"device", config_.audio.device},
+         {"sample_rate", std::to_string(audio_opened.value().sample_rate)},
+         {"channels", std::to_string(audio_opened.value().channels)},
+         {"samples_per_frame", std::to_string(audio_opened.value().samples_per_frame)},
+         {"format", ToString(audio_opened.value().format)}});
     auto model_opened = inference_->Open(config_.inference);  // 推理模型初始化结果。
     if (!model_opened) {
         audio_capture_->Close();
@@ -458,6 +491,7 @@ void Application::AudioCaptureLoop(std::stop_token stop) {
                     metrics_.Increment(MetricCounter::kRecoveries);
                     continue;
                 }
+                LogWorkerError("audio_capture_recover", recovered.error());
             }
             if (!captured.error().retryable) {
                 ReportFatal(captured.error());

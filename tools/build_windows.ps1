@@ -27,7 +27,8 @@ if (Test-Path -LiteralPath $rkavSourceLink) {
 & cmake -S $rkavSourceLink -B $rkavBuildDir -G Ninja `
     "-DCMAKE_BUILD_TYPE=$Configuration" `
     "-DRKAV_BUILD_TESTS=ON" `
-    "-DRKAV_ENABLE_MOCK=ON"
+    "-DRKAV_ENABLE_MOCK=ON" `
+    "-DRKAV_WITH_V4L2=OFF"
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
 
 & cmake --build $rkavBuildDir -j 4

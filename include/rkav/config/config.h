@@ -29,10 +29,13 @@ struct VideoFailureConfig {
 
 struct VideoConfig {
     std::string backend{"mock"};               // 视频后端名称。
+    std::string device{"/dev/video0"};         // V4L2 设备节点；Mock 后端忽略。
     int width{1280};                           // 帧宽，单位像素。
     int height{720};                           // 帧高，单位像素。
     int fps{30};                               // 目标帧率。
     PixelFormat format{PixelFormat::kRgb888};  // 期望像素格式。
+    int capture_timeout_ms{1000};              // V4L2 等待一帧的最长时间。
+    std::size_t mmap_buffer_count{4};          // V4L2 驱动 MMAP 缓冲数量。
     std::size_t queue_capacity{4};             // 视频编码队列最多容纳的帧数。
     OverflowPolicy overflow_policy{OverflowPolicy::kDropOldest};  // 满队列处理方式。
     std::string pattern{"moving_box"};                            // Mock 测试图样式。
@@ -47,11 +50,13 @@ struct AudioFailureConfig {
 };
 
 struct AudioConfig {
-    std::string backend{"mock"};                // 音频后端名称。
-    int sample_rate{48000};                     // 每秒每声道采样点数，单位 Hz。
-    int channels{1};                            // 声道数。
+    std::string backend{"mock"};   // 音频后端名称：mock 或 alsa。
+    std::string device{"hw:0,0"};  // ALSA 设备，格式 hw:CARD,DEVICE；Mock 后端忽略。
+    int sample_rate{48000};        // 每秒每声道采样点数，单位 Hz。
+    int channels{1};               // 声道数。
     SampleFormat format{SampleFormat::kS16LE};  // PCM 样本格式。
     int frame_duration_ms{20};                  // 每个 AudioFrame 覆盖的时长。
+    int capture_timeout_ms{1000};               // ALSA 等待一个 PCM 块的最长时间。
     int queue_capacity_ms{300};                 // 音频队列可缓存的总时长。
     std::string signal{"sine"};                 // Mock 信号类型：sine 或 silence。
     double frequency_hz{1000.0};                // 正弦波频率。

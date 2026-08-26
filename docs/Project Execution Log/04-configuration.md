@@ -1,4 +1,4 @@
-# Mock 配置说明
+# Mock 与 V4L2 阶段配置说明
 
 配置入口是 `config/mock.json`。加载器会拒绝未知字段和不合理取值，避免字段拼错后悄悄
 使用默认值。`schema_version` 当前只能为 `1`。
@@ -7,7 +7,7 @@
 
 | 字段 | 含义 | 当前约束 |
 |---|---|---|
-| `mode` | 运行模式 | 仅 `mock` |
+| `mode` | 运行模式 | `mock` 或逐步接硬件时使用的 `hardware` |
 | `log_level` | 最低日志级别 | `trace/debug/info/warn/error/fatal` |
 | `shutdown_timeout_ms` | 停止操作期限 | 100 至 60000 ms |
 | `run_duration_seconds` | 自动停止秒数 | 0 表示直到收到信号 |
@@ -23,6 +23,18 @@ Mock 视频只生成 `RGB888`。`width`、`height`、`fps` 定义布局和节拍
 
 `failure.fail_after_frames=N` 表示从第 N 次读取开始注入失败，连续失败次数由
 `fail_for_frames` 指定。`read_delay_ms` 可模拟慢采集。
+
+Linux 构建启用 `RKAV_WITH_V4L2` 后，`backend` 可设为 `v4l2`。第一阶段接受 `MJPEG`
+或 `YUYV`，新增字段如下：
+
+| 字段 | 含义 | 当前约束 |
+|---|---|---|
+| `device` | V4L2 采集节点 | 非空；实测为 `/dev/video9`，重启或拔插后仍须重新枚举 |
+| `capture_timeout_ms` | 等待一帧的超时 | 100 至 60000 ms |
+| `mmap_buffer_count` | 驱动 MMAP 缓冲数量 | 2 至 32 |
+
+当前硬件阶段配置见 `config/rk3568-v4l2.json`。它只把视频替换为真实 V4L2，音频、推理和
+编码仍使用 Mock/Checksum，以便按单变量原则联调。
 
 ## audio
 

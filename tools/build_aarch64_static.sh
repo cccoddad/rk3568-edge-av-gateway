@@ -22,6 +22,7 @@ mkdir -p "$rkav_output_dir"
 cp "$rkav_build_dir/rkav-gateway" "$rkav_output_dir/rkav-gateway"
 cp "$rkav_build_dir/tests/rkav_tests" "$rkav_output_dir/rkav_tests"
 cp "$rkav_project_root/config/mock.json" "$rkav_output_dir/mock.json"
+cp "$rkav_project_root/config/rk3568-v4l2.json" "$rkav_output_dir/rk3568-v4l2.json"
 cp "$rkav_project_root/tools/soak_test_buildroot.sh" "$rkav_output_dir/soak_test_buildroot.sh"
 chmod +x "$rkav_output_dir/soak_test_buildroot.sh"
 

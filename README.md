@@ -1,9 +1,8 @@
 # RK3568 实时音视频边缘分析网关
 
-这是按《开发全流程手册》实现的第一版正式工程。当前版本不依赖摄像头、麦克风或
-Rockchip SDK，使用可重复验证的 Mock 后端跑通视频、音频、推理、编码、分发、监控和
-受控关闭全链路。真实硬件到货后只替换接口后端，不修改公共数据契约和 Application
-主流程。
+这是按《开发全流程手册》实现的第一版正式工程。Mock 后端用于可重复回归，Linux 上已经
+加入并实机验证真实 V4L2 摄像头和 ALSA 麦克风后端；推理、编码与输出仍保留 Mock/Checksum
+实现。硬件替换不修改公共数据契约和 Application 主流程。
 
 ## 当前完成度
 
@@ -12,20 +11,24 @@ Rockchip SDK，使用可重复验证的 Mock 后端跑通视频、音频、推�
 - M2 Mock 数据：RGB 测试图、连续正弦波、可配置视频失败、XRUN 和设备失联。
 - M3 多线程管道：Mock 推理、Checksum Encoder、PacketRouter、Null/JSONL Sink。
 - M4 工程能力：强类型配置、结构化日志、指标、工作线程健康检查和故障退出。
-- 自动测试：30 项单元与集成测试，覆盖正常、慢推理、慢 Sink 和故障场景。
+- 自动测试：34 项单元与集成测试，覆盖正常、慢推理、慢 Sink、故障场景和硬件配置契约。
 
-ARM64 静态 Mock 已在 RK3568 Buildroot 完成 10 秒实机运行；板端测试留档、信号验收、
-30 分钟及 2 小时长稳仍需执行。当前镜像使用 SysV init，不适用 systemd。V4L2、ALSA、
-RKNN、RGA、MPP 和实际 RTSP/MP4 输出尚未接入，不能把当前
-Checksum packet 当作 H.264/AAC 成品。
+ARM64 静态 Mock 已在 RK3568 Buildroot 完成 33 项当前 PC 回归基线、板端 30 项旧基线、
+信号退出、30 分钟和 2 小时长稳。绿联 2K 摄像头已完成 UVC/UAC 枚举、720p MJPEG 样本、
+48 kHz 双声道 WAV 和 300 帧持续采集验收。第一版 V4L2 MMAP 后端已完成 ARM64 交叉编译，
+并在板端通过 60 秒 Application 联调：1,741 帧、约 29.0 FPS、零错误和零队列丢弃。ALSA
+内核 UAPI 后端也已完成 ARM64 交叉编译和板端双路联调：10 秒采集 500 个音频块和 285 帧
+视频；30 分钟采集 90,000 个音频块和 52,340 帧视频，RSS 稳定为 9,728 KiB，错误、恢复和
+队列丢弃均为 0，SIGINT/SIGTERM 也能排空队列并正常退出。RKNN、RGA、MPP 和实际 RTSP/MP4
+输出仍未接入，不能把当前 Checksum packet 当作 H.264/AAC 成品。
 
 ## 数据流
 
 ```text
-MockVideoCapture -> video queue -> ChecksumVideoEncoder --+
-                 -> inference queue -> MockInference       |
-                                                          +-> PacketRouter -> sinks
-MockAudioCapture -> audio queue -> ChecksumAudioEncoder ---+
+Mock/V4L2VideoCapture -> video queue -> ChecksumVideoEncoder --+
+                      -> inference queue -> MockInference       |
+                                                               +-> PacketRouter -> sinks
+Mock/AlsaAudioCapture  -> audio queue -> ChecksumAudioEncoder    +
 ```
 
 每个跨线程队列都有固定容量。视频与推理队列优先保留新数据；音频队列阻塞生产者并在
@@ -93,10 +96,13 @@ sh ./tools/soak_test.sh 1800
 ```
 
 RK3568 M5 板端基线、Sanitizer、SIGTERM、长稳和 systemd 的完整验收步骤见
-[M5 板端验收](docs/Project%20Execution%20Log/08-m5-board-validation.md)。
+[M5 板端验收](docs/08-m5-board-validation.md)。
 
 当前粤嵌 Buildroot 的交叉编译、直连网络、SSH 部署、实测指标和下一步见
-[Buildroot 交叉编译与 RK3568 上板阶段总结](docs/Project%20Execution%20Log/09-buildroot-cross-compile-and-board-bringup-summary.md)。
+[Buildroot 交叉编译与 RK3568 上板阶段总结](docs/09-buildroot-cross-compile-and-board-bringup-summary.md)。
+
+真实绿联摄像头和麦克风的 VID/PID、格式、样本与持续采集证据见
+[UGREEN 2K USB 音视频设备验收](docs/11-ugreen-camera-and-microphone-validation.md)。
 
 ## 目录说明
 

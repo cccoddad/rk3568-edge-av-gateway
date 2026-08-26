@@ -23,6 +23,8 @@ jobs:
           cmake -S . -B build/tidy -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DRKAV_BUILD_TESTS=OFF
+          -DRKAV_WITH_V4L2=ON
+          -DRKAV_WITH_ALSA=ON
           -DCMAKE_CXX_CLANG_TIDY=clang-tidy
       - name: Run clang-tidy while building
         run: cmake --build build/tidy -j2
@@ -32,13 +34,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure
-        run: cmake --preset debug
+        run: cmake --preset debug -DRKAV_WITH_V4L2=ON -DRKAV_WITH_ALSA=ON
       - name: Build
         run: cmake --build --preset debug -j2
       - name: Test
         run: ctest --preset debug
       - name: Validate default configuration
         run: ./build/debug/rkav-gateway --validate-config --config config/mock.json
+      - name: Validate V4L2 phase configuration
+        run: ./build/debug/rkav-gateway --validate-config --config config/rk3568-v4l2.json
 
   sanitizers:
     runs-on: ubuntu-24.04

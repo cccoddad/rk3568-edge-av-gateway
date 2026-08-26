@@ -59,7 +59,9 @@
       "toolchainFile": "${sourceDir}/cmake/Toolchains/aarch64-linux-gnu-static.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "RKAV_BUILD_TESTS": "ON"
+        "RKAV_BUILD_TESTS": "ON",
+        "RKAV_WITH_V4L2": "ON",
+        "RKAV_WITH_ALSA": "ON"
       }
     }
   ],

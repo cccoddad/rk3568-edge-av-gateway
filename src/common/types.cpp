@@ -17,8 +17,15 @@ Error ValidationError(std::string message) {
 /// 功能：根据像素格式、stride 和高度计算一帧至少需要多少字节。
 /// 返回：成功时为最小字节数；尺寸、格式或计算溢出时为 Error。
 Result<std::size_t> MinimumVideoBytes(const VideoFrame& frame) {
-    if (frame.width <= 0 || frame.height <= 0 || frame.stride <= 0) {
-        return Result<std::size_t>::Failure(ValidationError("invalid video dimensions or stride"));
+    if (frame.width <= 0 || frame.height <= 0) {
+        return Result<std::size_t>::Failure(ValidationError("invalid video dimensions"));
+    }
+    // 压缩 MJPEG 没有逐行 stride，payload 只需保证非空。
+    if (frame.format == PixelFormat::kMjpeg) {
+        return Result<std::size_t>::Success(1U);
+    }
+    if (frame.stride <= 0) {
+        return Result<std::size_t>::Failure(ValidationError("invalid video stride"));
     }
 
     const auto height = static_cast<std::size_t>(frame.height);  // 图像行数。

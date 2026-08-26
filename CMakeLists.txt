@@ -67,6 +67,36 @@ if(RKAV_ENABLE_MOCK)
     )
 endif()
 
+# V4L2 仅依赖 Linux 内核 UAPI 和系统调用，不引入厂商 SDK 类型。
+if(RKAV_WITH_V4L2)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "RKAV_WITH_V4L2 requires a Linux target")
+    endif()
+    add_library(rkav_v4l2
+        src/capture/v4l2/v4l2_video_capture.cpp
+    )
+    target_include_directories(rkav_v4l2 PUBLIC include)
+    target_link_libraries(rkav_v4l2
+        PUBLIC rkav_core rkav_project_options
+        PRIVATE rkav_project_warnings
+    )
+endif()
+
+# ALSA 后端直接调用 Linux PCM 内核 UAPI，不依赖 libasound，因此适合旧 Buildroot 的静态链接。
+if(RKAV_WITH_ALSA)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "RKAV_WITH_ALSA requires a Linux target")
+    endif()
+    add_library(rkav_alsa
+        src/capture/alsa/alsa_audio_capture.cpp
+    )
+    target_include_directories(rkav_alsa PUBLIC include)
+    target_link_libraries(rkav_alsa
+        PUBLIC rkav_core rkav_project_options
+        PRIVATE rkav_project_warnings
+    )
+endif()
+
 # rkav_app 负责管道组装、输出路由和生命周期。
 add_library(rkav_app
     src/app/application.cpp
@@ -81,6 +111,12 @@ target_link_libraries(rkav_app
 if(RKAV_ENABLE_MOCK)
     target_link_libraries(rkav_app PUBLIC rkav_mock)
 endif()
+if(RKAV_WITH_V4L2)
+    target_link_libraries(rkav_app PUBLIC rkav_v4l2)
+endif()
+if(RKAV_WITH_ALSA)
+    target_link_libraries(rkav_app PUBLIC rkav_alsa)
+endif()
 
 # main 只负责进程入口，核心逻辑通过 rkav_app 复用和测试。
 add_executable(rkav-gateway app/main.cpp)
@@ -88,6 +124,9 @@ target_link_libraries(rkav-gateway PRIVATE rkav_app rkav_project_warnings rkav_p
 
 install(TARGETS rkav-gateway RUNTIME DESTINATION bin)
 install(FILES config/mock.json DESTINATION etc/rkav)
+if(RKAV_WITH_V4L2)
+    install(FILES config/rk3568-v4l2.json DESTINATION etc/rkav)
+endif()
 
 # 测试依赖只在显式启用时下载和编译，不影响最终板端最小构建。
 if(RKAV_BUILD_TESTS)

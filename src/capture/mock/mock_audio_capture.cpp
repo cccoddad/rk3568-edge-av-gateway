@@ -49,10 +49,18 @@ Result<AudioFrame> MockAudioCapture::Read(std::stop_token stop) {
     TimestampUs start_us = 0;        // 音频时间轴起点，单位微秒。
     std::uint64_t sequence = 0;      // 本次准备生成的逻辑块序号。
     std::uint64_t first_sample = 0;  // 本块首样本在连续波形中的绝对索引。
+    if (stop.stop_requested()) {
+        return Result<AudioFrame>::Failure(
+            AudioError(ErrorCategory::kCancelled, "read was cancelled", false));
+    }
     {
         // 只在复制共享状态时持锁，生成大量样本时不占用 mutex_。
         std::scoped_lock lock(mutex_);
         if (!open_) {
+            if (stop.stop_requested()) {
+                return Result<AudioFrame>::Failure(
+                    AudioError(ErrorCategory::kCancelled, "read was cancelled", false));
+            }
             return Result<AudioFrame>::Failure(
                 AudioError(ErrorCategory::kInvalidState, "capture is not open", false));
         }

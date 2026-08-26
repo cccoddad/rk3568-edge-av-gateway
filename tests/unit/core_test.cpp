@@ -66,6 +66,13 @@ TEST(TypeValidationTest, RejectsRgbFrameWithShortStride) {
     EXPECT_EQ(result.error().category, ErrorCategory::kInvalidConfig);
 }
 
+// 压缩 MJPEG 没有逐行 stride；只要尺寸、PTS 和 payload 有效就应通过公共契约。
+TEST(TypeValidationTest, AcceptsMjpegFrameWithoutStride) {
+    VideoFrame frame{0, 0, 1280, 720, 0, PixelFormat::kMjpeg, Buffer::Allocate(1024U), {}};
+
+    EXPECT_TRUE(ValidateVideoFrame(frame));
+}
+
 // 验证累计计数、延迟样本和队列统计都能出现在最终 JSON 中。
 TEST(MetricsTest, ExposesCountersLatencyAndQueueState) {
     MetricsRegistry metrics;

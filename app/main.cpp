@@ -33,7 +33,7 @@ struct CommandLine {
 
 /// 功能：把可用参数和含义打印到标准输出。
 void PrintHelp() {
-    std::cout << "RK3568 audio-video edge gateway (mock development phase)\n\n"
+    std::cout << "RK3568 audio-video edge gateway\n\n"
               << "Usage: rkav-gateway [options]\n"
               << "  --config <path>      Load the given JSON configuration\n"
               << "  --duration <seconds> Override run duration; 0 runs until a signal\n"

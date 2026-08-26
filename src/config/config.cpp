@@ -117,15 +117,19 @@ Result<void> ParseRuntime(const Json& json, RuntimeConfig& config) {
 /// 功能：解析视频参数、溢出策略和视频故障注入配置。
 Result<void> ParseVideo(const Json& json, VideoConfig& config) {
     auto keys = RejectUnknownKeys(json, "video",
-                                  {"backend", "width", "height", "fps", "format", "queue_capacity",
+                                  {"backend", "device", "width", "height", "fps", "format",
+                                   "capture_timeout_ms", "mmap_buffer_count", "queue_capacity",
                                    "overflow_policy", "pattern", "realtime", "failure"});
     if (!keys) {
         return keys;
     }
     config.backend = json.value("backend", config.backend);
+    config.device = json.value("device", config.device);
     config.width = json.value("width", config.width);
     config.height = json.value("height", config.height);
     config.fps = json.value("fps", config.fps);
+    config.capture_timeout_ms = json.value("capture_timeout_ms", config.capture_timeout_ms);
+    config.mmap_buffer_count = json.value("mmap_buffer_count", config.mmap_buffer_count);
     config.queue_capacity = json.value("queue_capacity", config.queue_capacity);
     config.pattern = json.value("pattern", config.pattern);
     config.realtime = json.value("realtime", config.realtime);
@@ -162,17 +166,20 @@ Result<void> ParseVideo(const Json& json, VideoConfig& config) {
 
 /// 功能：解析 PCM 参数、信号发生器和音频故障注入配置。
 Result<void> ParseAudio(const Json& json, AudioConfig& config) {
-    auto keys = RejectUnknownKeys(
-        json, "audio",
-        {"backend", "sample_rate", "channels", "format", "frame_duration_ms", "queue_capacity_ms",
-         "signal", "frequency_hz", "amplitude", "realtime", "failure"});
+    auto keys =
+        RejectUnknownKeys(json, "audio",
+                          {"backend", "sample_rate", "channels", "format", "frame_duration_ms",
+                           "queue_capacity_ms", "device", "capture_timeout_ms", "signal",
+                           "frequency_hz", "amplitude", "realtime", "failure"});
     if (!keys) {
         return keys;
     }
     config.backend = json.value("backend", config.backend);
+    config.device = json.value("device", config.device);
     config.sample_rate = json.value("sample_rate", config.sample_rate);
     config.channels = json.value("channels", config.channels);
     config.frame_duration_ms = json.value("frame_duration_ms", config.frame_duration_ms);
+    config.capture_timeout_ms = json.value("capture_timeout_ms", config.capture_timeout_ms);
     config.queue_capacity_ms = json.value("queue_capacity_ms", config.queue_capacity_ms);
     config.signal = json.value("signal", config.signal);
     config.frequency_hz = json.value("frequency_hz", config.frequency_hz);
@@ -385,8 +392,8 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
     if (config.schema_version != 1) {
         return fail("schema_version", "only schema version 1 is supported");
     }
-    if (config.runtime.mode != "mock") {
-        return fail("runtime.mode", "only mock mode is implemented in the board-only phase");
+    if (config.runtime.mode != "mock" && config.runtime.mode != "hardware") {
+        return fail("runtime.mode", "expected 'mock' or 'hardware'");
     }
     const std::set<std::string> supported_log_levels{"trace", "debug", "info",
                                                      "warn",  "error", "fatal"};
@@ -399,18 +406,41 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
     if (config.runtime.run_duration_seconds < 0) {
         return fail("runtime.run_duration_seconds", "must not be negative");
     }
-    if (config.video.backend != "mock") {
-        return fail("video.backend", "requested backend is not implemented in this build");
-    }
     if (config.video.width < 16 || config.video.width > 7680 || config.video.height < 16 ||
         config.video.height > 4320) {
-        return fail("video", "width/height are outside the supported mock range");
+        return fail("video", "width/height are outside the supported range");
     }
     if (config.video.fps < 1 || config.video.fps > 120) {
         return fail("video.fps", "expected integer in range [1, 120]");
     }
-    if (config.video.format != PixelFormat::kRgb888) {
-        return fail("video.format", "mock video currently produces RGB888 only");
+    if (config.video.backend == "mock") {
+#if RKAV_ENABLE_MOCK
+        if (config.video.format != PixelFormat::kRgb888) {
+            return fail("video.format", "mock video currently produces RGB888 only");
+        }
+#else
+        return fail("video.backend", "mock video backend is not compiled in");
+#endif
+    } else if (config.video.backend == "v4l2") {
+#if RKAV_WITH_V4L2
+        if (config.video.device.empty()) {
+            return fail("video.device", "V4L2 device path must not be empty");
+        }
+        if (config.video.format != PixelFormat::kMjpeg &&
+            config.video.format != PixelFormat::kYuyv422) {
+            return fail("video.format", "V4L2 phase 1 supports MJPEG or YUYV only");
+        }
+#else
+        return fail("video.backend", "V4L2 backend is not compiled in");
+#endif
+    } else {
+        return fail("video.backend", "expected 'mock' or 'v4l2'");
+    }
+    if (config.video.capture_timeout_ms < 100 || config.video.capture_timeout_ms > 60'000) {
+        return fail("video.capture_timeout_ms", "expected value in range [100, 60000]");
+    }
+    if (config.video.mmap_buffer_count < 2U || config.video.mmap_buffer_count > 32U) {
+        return fail("video.mmap_buffer_count", "expected value in range [2, 32]");
     }
     if (config.video.queue_capacity == 0U || config.video.queue_capacity > 4096U) {
         return fail("video.queue_capacity", "expected value in range [1, 4096]");
@@ -418,8 +448,20 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
     if (config.video.failure.read_delay_ms < 0) {
         return fail("video.failure.read_delay_ms", "must not be negative");
     }
-    if (config.audio.backend != "mock") {
-        return fail("audio.backend", "requested backend is not implemented in this build");
+    if (config.audio.backend == "mock") {
+#if !RKAV_ENABLE_MOCK
+        return fail("audio.backend", "mock audio backend is not compiled in");
+#endif
+    } else if (config.audio.backend == "alsa") {
+#if RKAV_WITH_ALSA
+        if (config.audio.device.empty()) {
+            return fail("audio.device", "ALSA device must not be empty");
+        }
+#else
+        return fail("audio.backend", "ALSA backend is not compiled in");
+#endif
+    } else {
+        return fail("audio.backend", "expected 'mock' or 'alsa'");
     }
     if (config.audio.sample_rate < 8000 || config.audio.sample_rate > 192000) {
         return fail("audio.sample_rate", "expected value in range [8000, 192000]");
@@ -428,7 +470,7 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
         return fail("audio.channels", "expected value in range [1, 8]");
     }
     if (config.audio.format != SampleFormat::kS16LE) {
-        return fail("audio.format", "mock audio currently produces S16_LE only");
+        return fail("audio.format", "audio backends currently support S16_LE only");
     }
     if (config.audio.frame_duration_ms <= 0 || config.audio.frame_duration_ms > 1000 ||
         (static_cast<std::int64_t>(config.audio.sample_rate) * config.audio.frame_duration_ms) %
@@ -441,6 +483,9 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
         config.audio.queue_capacity_ms > 60'000) {
         return fail("audio.queue_capacity_ms",
                     "must hold at least one frame and not exceed 60000 ms");
+    }
+    if (config.audio.capture_timeout_ms < 100 || config.audio.capture_timeout_ms > 60'000) {
+        return fail("audio.capture_timeout_ms", "expected value in range [100, 60000]");
     }
     if (config.audio.signal != "silence" && config.audio.signal != "sine") {
         return fail("audio.signal", "expected 'silence' or 'sine'");
@@ -533,6 +578,7 @@ std::string ConfigSummary(const AppConfig& config) {
         {"runtime", {{"mode", config.runtime.mode}, {"log_level", config.runtime.log_level}}},
         {"video",
          {{"backend", config.video.backend},
+          {"device", config.video.device},
           {"width", config.video.width},
           {"height", config.video.height},
           {"fps", config.video.fps},
@@ -541,6 +587,7 @@ std::string ConfigSummary(const AppConfig& config) {
           {"overflow_policy", ToString(config.video.overflow_policy)}}},
         {"audio",
          {{"backend", config.audio.backend},
+          {"device", config.audio.device},
           {"sample_rate", config.audio.sample_rate},
           {"channels", config.audio.channels},
           {"format", ToString(config.audio.format)},
