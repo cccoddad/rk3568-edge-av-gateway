@@ -23,11 +23,26 @@
 CMake 子工程：
 
 - 可执行文件动态依赖板端 `librknnrt.so` 和 glibc。
-- `libstdc++` 与 `libgcc` 静态并入，降低宿主交叉工具链与旧板端的版本差异。
+- 冒烟程序使用 C17，避免静态 `libstdc++` 从 Ubuntu 24.04 引入板端不存在的新 glibc 符号。
 - 不设置构建机 RPATH，板端从 `/usr/lib` 解析 Runtime。
+- 构建脚本检查全部 `GLIBC_*` 符号，最高版本不得超过板端的 `GLIBC_2.35`。
 - SDK 文件保存在仓库外，不把厂商二进制提交到 Git。
 
-## 3. 冒烟程序行为
+## 3. 板端兼容性基线
+
+2026-08-26 在目标板读取到：
+
+- Buildroot `2018.02-rc3-dirty`，Linux `4.19.232`，AArch64。
+- glibc `2.35`，由 GCC `10.3.0` 编译；板端没有原生 GCC/G++。
+- `/usr/lib/librknnrt.so` 的 MD5 为 `757e7f089e657a7fc28c67c71738f0cc`，它自身最高只要求
+  `GLIBC_2.17`。
+- NPU 通过 `/dev/dri/card1` 和 `/dev/dri/renderD129` 提供设备节点，没有 `/dev/rknpu`。
+
+首次使用 Ubuntu 24.04 的 G++ 13 交叉编译时，虽然 `libstdc++` 已静态链接，产物仍最高要求
+`GLIBC_2.38`。该产物不能部署到 glibc 2.35 的板端。改用 C17 后由构建脚本直接阻止这类 ABI
+不兼容产物进入上板步骤。
+
+## 4. 冒烟程序行为
 
 `rknn-smoke` 依次执行：
 
@@ -40,9 +55,10 @@ CMake 子工程：
 
 全零输入只验证执行闭环，不验证分类准确率。固定图片正确性在下一阶段单独完成。
 
-## 4. 验收标准
+## 5. 验收标准
 
 - 产物是 Linux AArch64 ELF，并且 `NEEDED` 包含 `librknnrt.so`。
+- 产物要求的最高 glibc 符号版本不超过 `GLIBC_2.35`。
 - 板端打印 Runtime 1.4.0 和驱动 0.8.2。
 - MobileNet 的输入输出属性可读取。
 - 单次和 100 次运行均返回 0。

@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Cross-builds the dynamic RKNN smoke test while keeping libstdc++ and libgcc self-contained.
+# Cross-builds the dynamic RKNN smoke test and enforces the target board's glibc ceiling.
 set -eu
 
 # Keep file/readelf output stable because the validation below parses their English identifiers.
@@ -17,7 +17,7 @@ if [ -z "${RKNN_SDK_ROOT:-}" ]; then
     exit 2
 fi
 
-for rkav_command in cmake ninja aarch64-linux-gnu-g++ file readelf; do
+for rkav_command in cmake ninja aarch64-linux-gnu-gcc file readelf; do
     if ! command -v "$rkav_command" >/dev/null 2>&1; then
         echo "required command not found: $rkav_command" >&2
         exit 2
@@ -44,4 +44,19 @@ if ! readelf -d "$rkav_output_dir/rknn-smoke" | grep -q 'librknnrt.so'; then
     exit 1
 fi
 
-printf 'rknn_smoke_build=passed\nartifact=%s\n' "$rkav_output_dir/rknn-smoke"
+rkav_glibc_versions=$(readelf --version-info "$rkav_output_dir/rknn-smoke" |
+    grep -o 'GLIBC_[0-9][0-9.]*' | sort -Vu)
+printf '%s\n' 'required_glibc_versions:' "$rkav_glibc_versions"
+for rkav_glibc_version in $rkav_glibc_versions; do
+    rkav_version=${rkav_glibc_version#GLIBC_}
+    rkav_major=${rkav_version%%.*}
+    rkav_remainder=${rkav_version#*.}
+    rkav_minor=${rkav_remainder%%.*}
+    if [ "$rkav_major" -gt 2 ] || { [ "$rkav_major" -eq 2 ] && [ "$rkav_minor" -gt 35 ]; }; then
+        echo "rknn-smoke requires $rkav_glibc_version, newer than board glibc 2.35" >&2
+        exit 1
+    fi
+done
+
+printf 'rknn_smoke_build=passed\nglibc_ceiling=2.35\nartifact=%s\n' \
+    "$rkav_output_dir/rknn-smoke"

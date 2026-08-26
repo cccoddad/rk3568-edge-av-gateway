@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
-project(rknn_smoke LANGUAGES CXX)
+project(rknn_smoke LANGUAGES C)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_SKIP_RPATH TRUE)
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
@@ -26,7 +26,7 @@ endif()
 
 find_package(Threads REQUIRED)
 
-add_executable(rknn-smoke main.cpp)
+add_executable(rknn-smoke main.c)
 target_include_directories(rknn-smoke PRIVATE "${RKNN_INCLUDE_DIR}")
 target_link_libraries(rknn-smoke PRIVATE
     "${RKNN_RUNTIME_LIBRARY}"
@@ -41,7 +41,4 @@ target_compile_options(rknn-smoke PRIVATE
     -Wshadow
     -Werror
 )
-# Keep the C++ and GCC runtimes self-contained while loading librknnrt.so from the board rootfs.
-target_link_options(rknn-smoke PRIVATE -static-libstdc++ -static-libgcc)
-
 install(TARGETS rknn-smoke RUNTIME DESTINATION bin)
