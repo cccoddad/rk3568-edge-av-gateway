@@ -106,5 +106,21 @@ LD_LIBRARY_PATH=/usr/lib rknn-smoke model.rknn 1 input-224x224-rgb.bin
 - 生成 `/userdata/rkav/input/camera-224x224-rgb.bin`，大小严格等于 150528 字节，SHA-256
   为 `63135b732665225f0bcef32b472cd15e5548d95681fcd32e4e06d36b1f442bd0`。
 
-这一步证明真实摄像头 MJPEG 可以转换为当前 MobileNet 的输入尺寸和布局。它尚未证明这张画面
-已经进入 NPU；需要部署支持 RGB 文件参数的新版 `rknn-smoke` 后再完成单帧真实像素推理。
+这一步证明真实摄像头 MJPEG 可以转换为当前 MobileNet 的输入尺寸和布局。
+
+## 8. 真实摄像头单帧 NPU 推理实测
+
+部署支持 RGB 文件参数的新版 `rknn-smoke` 后，使用上一节生成的真实摄像头输入完成推理：
+
+- 上板程序 SHA-256 为 `66b27f84b98142a35befae410859dca6861ec856e8c8aa9dc5f2dedfc4d89d89`。
+- 输入以 `UINT8`、NHWC 提交，150528 字节的 FNV-1a 摘要为 `0x8d8fb29a6e85ed07`。
+- 输出包含 1001 个有限浮点值，FNV-1a 摘要为 `0xa558f10d24493a87`。
+- Top-5 类别索引依次为 572、779、618、838、439；最高分为 `0.10546875`。
+- 核心推理耗时为 `6224 us`，程序退出码为 0，并打印
+  `smoke_test status=passed iterations=1`。
+- NPU/IOMMU 中断计数从 101 增加到 102，期间没有新增 NPU、IOMMU、fault、timeout 或 panic
+  内核日志。
+
+至此已经证明真实摄像头数据可以完成抓取、JPEG 解码、缩放、RGB 转换和 RKNN/NPU 推理。
+当前模型仍是整图分类模型，最高分较低且板端没有类别表；这些索引不作为可靠业务识别结果。
+项目下一阶段按既定方案选择与 Runtime 1.4.0 兼容的目标检测模型，输出检测框、类别和置信度。
