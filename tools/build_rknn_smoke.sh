@@ -2,6 +2,10 @@
 # Cross-builds the dynamic RKNN smoke test while keeping libstdc++ and libgcc self-contained.
 set -eu
 
+# Keep file/readelf output stable because the validation below parses their English identifiers.
+LC_ALL=C
+export LC_ALL
+
 rkav_script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 rkav_project_root=$(CDPATH= cd -- "$rkav_script_dir/.." && pwd)
 rkav_source_dir="$rkav_project_root/tools/rknn_smoke"
