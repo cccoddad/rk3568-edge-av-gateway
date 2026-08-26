@@ -19,8 +19,10 @@ ARM64 静态 Mock 已在 RK3568 Buildroot 完成 33 项当前 PC 回归基线、
 并在板端通过 60 秒 Application 联调：1,741 帧、约 29.0 FPS、零错误和零队列丢弃。ALSA
 内核 UAPI 后端也已完成 ARM64 交叉编译和板端双路联调：10 秒采集 500 个音频块和 285 帧
 视频；30 分钟采集 90,000 个音频块和 52,340 帧视频，RSS 稳定为 9,728 KiB，错误、恢复和
-队列丢弃均为 0，SIGINT/SIGTERM 也能排空队列并正常退出。RKNN、RGA、MPP 和实际 RTSP/MP4
-输出仍未接入，不能把当前 Checksum packet 当作 H.264/AAC 成品。
+队列丢弃均为 0，SIGINT/SIGTERM 也能排空队列并正常退出。独立 RKNN 1.4.0 MobileNet
+冒烟程序已在板端完成单次和 100 次连续 NPU 推理；主程序推理仍为 Mock，RGA、MPP 和实际
+RTSP/MP4 输出也未接入，不能把冒烟结果当作真实目标检测，也不能把当前 Checksum packet
+当作 H.264/AAC 成品。
 
 ## 数据流
 
