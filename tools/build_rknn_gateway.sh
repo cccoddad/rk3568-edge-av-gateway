@@ -7,7 +7,7 @@ export LC_ALL
 
 rkav_script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 rkav_project_root=$(CDPATH= cd -- "$rkav_script_dir/.." && pwd)
-rkav_build_dir="$rkav_project_root/build/cross-aarch64-rknn"
+rkav_build_dir=${RKAV_RKNN_BUILD_DIR:-"$rkav_project_root/build/cross-aarch64-rknn"}
 rkav_output_dir="$rkav_project_root/out/aarch64-rknn-gateway"
 
 if [ -z "${RKNN_SDK_ROOT:-}" ]; then

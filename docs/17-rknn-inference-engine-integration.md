@@ -46,11 +46,14 @@
 
 ```sh
 export RKNN_SDK_ROOT="$HOME/rk3568-work/vendor/rknpu2-v1.4.0/runtime/RK356X/Linux/librknn_api"
-sh ./tools/build_rknn_gateway.sh
+sh ./tools/build_rknn_gateway_container.sh
 ```
 
-脚本同时启用 Mock、V4L2、ALSA 和 RKNN，静态携带 `libstdc++/libgcc`，但动态使用板端 glibc
-和 `/usr/lib/librknnrt.so`。构建结束会拒绝高于 GLIBC 2.35 的符号需求，并生成
+容器构建入口固定使用 Ubuntu 22.04 的 AArch64 工具链，再调用裸机构建脚本。不能直接使用
+Ubuntu 24.04 的 AArch64 C++ 运行库，因为它会引入板端不存在的 `GLIBC_2.36` 和
+`GLIBC_2.38`。脚本同时启用 Mock、V4L2、ALSA 和 RKNN，静态携带
+`libstdc++/libgcc`，但动态使用板端 glibc 和 `/usr/lib/librknnrt.so`。构建结束会拒绝高于
+GLIBC 2.35 的符号需求，并生成
 `out/aarch64-rknn-gateway/SHA256SUMS`。
 
 `config/rk3568-rknn-rgb.json` 当前使用 Mock RGB 视频验证主程序 RKNN 生命周期，模型路径指向
@@ -68,7 +71,7 @@ sh ./tools/build_rknn_gateway.sh
 
 ## 6. 下一步
 
-1. 在 Ubuntu 执行 `build_rknn_gateway.sh`，确认 ELF、动态依赖和 GLIBC 上限。
+1. 在 Ubuntu 执行 `build_rknn_gateway_container.sh`，确认 ELF、动态依赖和 GLIBC 上限。
 2. 通过 TF 卡把主程序和配置部署到板端，先运行 Mock RGB + RKNN 10 秒。
 3. 新增独立 MJPEG 解码预处理接口，把 `/dev/video9` 帧转换为 CPU RGB888。
 4. 完成真实摄像头、ALSA 麦克风和 RKNN 的 10 秒、60 秒及长稳验证。

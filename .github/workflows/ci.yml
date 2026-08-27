@@ -78,4 +78,4 @@ jobs:
       - name: Cross-build RKNN gateway
         env:
           RKNN_SDK_ROOT: ${{ runner.temp }}/rknpu2-v1.4.0/runtime/RK356X/Linux/librknn_api
-        run: sh ./tools/build_rknn_gateway.sh
+        run: sh ./tools/build_rknn_gateway_container.sh
