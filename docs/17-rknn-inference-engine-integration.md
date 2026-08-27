@@ -65,13 +65,13 @@ GLIBC 2.35 的符号需求，并生成
 - 5 FPS Application 抽帧策略：集成测试通过。
 - 精确 RKNN 1.4.0 头文件：严格警告语法编译通过。
 - C17 YOLOv5 后处理：主机测试通过。
-- AArch64 RKNN 主程序动态构建：等待 Ubuntu 执行。
+- AArch64 RKNN 主程序动态构建：CI 使用 GCC/G++ 11.4.0 构建通过，最高要求 GLIBC 2.34。
 - 板端 Mock RGB + RKNN 10 秒运行：等待动态构建产物。
 - 真实 MJPEG 摄像头 + RKNN：等待 MJPEG 解码预处理层。
 
 ## 6. 下一步
 
-1. 在 Ubuntu 执行 `build_rknn_gateway_container.sh`，确认 ELF、动态依赖和 GLIBC 上限。
+1. 在 Ubuntu 执行 `build_rknn_gateway_container.sh` 生成可部署产物。
 2. 通过 TF 卡把主程序和配置部署到板端，先运行 Mock RGB + RKNN 10 秒。
 3. 新增独立 MJPEG 解码预处理接口，把 `/dev/video9` 帧转换为 CPU RGB888。
 4. 完成真实摄像头、ALSA 麦克风和 RKNN 的 10 秒、60 秒及长稳验证。
