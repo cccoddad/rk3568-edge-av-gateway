@@ -74,6 +74,25 @@ TEST(ApplicationTest, SlowInferenceDropsStaleFramesInsteadOfGrowingMemory) {
     EXPECT_LE(metrics["queues"]["inference"]["high_watermark"].get<std::size_t>(), 1U);
 }
 
+// 主动限速应在视频采集保持 60 FPS 时把推理请求稳定限制到约 10 FPS。
+TEST(ApplicationTest, InferenceMaxFpsSamplesFramesBeforeTheQueue) {
+    auto config = SmallRealtimeConfig();
+    config.inference.latency_ms = 0;
+    config.inference.max_fps = 10;
+    Application app(config);
+    ASSERT_TRUE(app.Start());
+    std::this_thread::sleep_for(350ms);
+    app.RequestStop("inference_rate_test_complete");
+    ASSERT_TRUE(app.Wait());
+
+    const auto metrics = app.MetricsSnapshot();
+    const auto captured = metrics["counters"]["video_captured_total"].get<std::uint64_t>();
+    const auto requests = metrics["counters"]["inference_requests_total"].get<std::uint64_t>();
+    EXPECT_GT(captured, 10U);
+    EXPECT_GE(requests, 2U);
+    EXPECT_LE(requests, 5U);
+}
+
 // Sink 每包延迟 40ms 时只在自己的容量 2 队列丢包，视频采集仍持续前进。
 TEST(ApplicationTest, SlowSinkIsIsolatedByItsBoundedQueue) {
     auto config = SmallRealtimeConfig();

@@ -15,6 +15,9 @@
 #if RKAV_WITH_V4L2
 #include "rkav/capture/v4l2_video_capture.h"
 #endif
+#if RKAV_WITH_RKNN
+#include "rkav/vision/rknn_inference_engine.h"
+#endif
 #include "rkav/common/logger.h"
 #include "rkav/media/checksum_encoder.h"
 #include "rkav/output/sinks.h"
@@ -173,6 +176,11 @@ Result<void> Application::CreateAndOpenBackends() {
 #if RKAV_WITH_ALSA
     if (config_.audio.backend == "alsa") {
         audio_capture_ = std::make_unique<AlsaAudioCapture>(clock_);
+    }
+#endif
+#if RKAV_WITH_RKNN
+    if (config_.inference.backend == "rknn") {
+        inference_ = std::make_unique<RknnInferenceEngine>(clock_);
     }
 #endif
     if (!video_capture_ || !audio_capture_ || !inference_ || !video_encoder_ || !audio_encoder_) {
@@ -440,6 +448,9 @@ std::optional<Error> Application::DetectStalledWorker(TimestampUs now_us) const 
 /// 功能：循环读取视频帧，同时投递到推理和视频编码两个分支。
 void Application::VideoCaptureLoop(std::stop_token stop) {
     video_capture_health_.MarkStarted(clock_->NowUs());
+    TimestampUs last_inference_pts_us = -1;  // 上一帧主动送入推理分支的来源 PTS。
+    const TimestampUs inference_interval_us =
+        config_.inference.max_fps == 0 ? 0 : 1'000'000 / config_.inference.max_fps;
     while (!stop.stop_requested()) {
         auto captured = video_capture_->Read(stop);  // 本次视频读取结果。
         if (!captured) {
@@ -460,8 +471,15 @@ void Application::VideoCaptureLoop(std::stop_token stop) {
         VideoFrame frame = std::move(captured).value();  // 本次成功读取的视频帧。
         metrics_.Increment(MetricCounter::kVideoCaptured);
         video_capture_health_.MarkProgress(clock_->NowUs());
-        // VideoFrame 的 Buffer 使用共享所有权：复制元数据送推理，移动原对象送编码。
-        const auto inference_status = inference_queue_->Push(frame, stop);  // 推理分支投递状态。
+        // 先按实测 NPU 吞吐抽帧，再由 keep_latest 队列处理瞬时积压。
+        QueueStatus inference_status = QueueStatus::kOk;
+        if (inference_interval_us == 0 || last_inference_pts_us < 0 ||
+            frame.pts_us - last_inference_pts_us >= inference_interval_us) {
+            inference_status = inference_queue_->Push(frame, stop);
+            if (inference_status == QueueStatus::kOk) {
+                last_inference_pts_us = frame.pts_us;
+            }
+        }
         const auto encode_status =
             video_encode_queue_->Push(std::move(frame), stop);  // 编码分支投递状态。
         if (inference_status == QueueStatus::kCancelled ||

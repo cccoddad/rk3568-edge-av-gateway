@@ -68,9 +68,14 @@ struct AudioConfig {
 struct InferenceConfig {
     std::string backend{"mock"};           // 推理后端名称。
     std::string mode{"synthetic_target"};  // Mock 结果生成模式。
+    std::string model_path;                // RKNN 模型路径；Mock 后端忽略。
     int input_width{320};                  // 模型输入宽度。
     int input_height{320};                 // 模型输入高度。
     int latency_ms{20};                    // Mock 单次推理延迟。
+    int max_fps{0};                        // 最大推理帧率；0 表示不主动限速。
+    float object_threshold{0.25F};         // YOLOv5 候选目标阈值。
+    float nms_threshold{0.45F};            // YOLOv5 同类别 NMS 阈值。
+    std::size_t max_detections{100};       // 单帧最多返回的检测框数量。
     std::size_t queue_capacity{1};         // 等待推理的视频帧数上限。
     OverflowPolicy overflow_policy{OverflowPolicy::kKeepLatest};  // 推理积压处理方式。
     int max_result_age_ms{200};  // 检测结果超过该年龄视为过期。

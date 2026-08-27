@@ -1,8 +1,8 @@
 # RK3568 实时音视频边缘分析网关
 
 这是按《开发全流程手册》实现的第一版正式工程。Mock 后端用于可重复回归，Linux 上已经
-加入并实机验证真实 V4L2 摄像头和 ALSA 麦克风后端；推理、编码与输出仍保留 Mock/Checksum
-实现。硬件替换不修改公共数据契约和 Application 主流程。
+加入并实机验证真实 V4L2 摄像头和 ALSA 麦克风后端；RKNN YOLOv5 推理后端已经实现为可选
+模块，编码与输出仍保留 Checksum 实现。硬件替换不修改公共数据契约和 Application 主流程。
 
 ## 当前完成度
 
@@ -11,7 +11,8 @@
 - M2 Mock 数据：RGB 测试图、连续正弦波、可配置视频失败、XRUN 和设备失联。
 - M3 多线程管道：Mock 推理、Checksum Encoder、PacketRouter、Null/JSONL Sink。
 - M4 工程能力：强类型配置、结构化日志、指标、工作线程健康检查和故障退出。
-- 自动测试：34 项单元与集成测试，覆盖正常、慢推理、慢 Sink、故障场景和硬件配置契约。
+- M6 推理接入：RKNN 1.4.0 生命周期、RGB/BGR 缩放、YOLOv5 后处理和来源坐标映射。
+- 自动测试：37 项单元与集成测试，覆盖正常、慢推理、限速、故障场景和硬件配置契约。
 
 ARM64 静态 Mock 已在 RK3568 Buildroot 完成 33 项当前 PC 回归基线、板端 30 项旧基线、
 信号退出、30 分钟和 2 小时长稳。绿联 2K 摄像头已完成 UVC/UAC 枚举、720p MJPEG 样本、
@@ -19,16 +20,17 @@ ARM64 静态 Mock 已在 RK3568 Buildroot 完成 33 项当前 PC 回归基线、
 并在板端通过 60 秒 Application 联调：1,741 帧、约 29.0 FPS、零错误和零队列丢弃。ALSA
 内核 UAPI 后端也已完成 ARM64 交叉编译和板端双路联调：10 秒采集 500 个音频块和 285 帧
 视频；30 分钟采集 90,000 个音频块和 52,340 帧视频，RSS 稳定为 9,728 KiB，错误、恢复和
-队列丢弃均为 0，SIGINT/SIGTERM 也能排空队列并正常退出。独立 RKNN 1.4.0 MobileNet
-冒烟程序已在板端完成单次和 100 次连续 NPU 推理；主程序推理仍为 Mock，RGA、MPP 和实际
-RTSP/MP4 输出也未接入，不能把冒烟结果当作真实目标检测，也不能把当前 Checksum packet
-当作 H.264/AAC 成品。
+队列丢弃均为 0，SIGINT/SIGTERM 也能排空队列并正常退出。独立 RKNN 1.4.0 MobileNet 和
+YOLOv5s 已在板端完成真实 NPU 推理，YOLOv5 已验证固定图、摄像头单帧及连续 10 次基线。
+主程序 RKNN 后端代码已经加入，但真实摄像头输出仍是 MJPEG，尚需接入解码预处理后才能完成
+实时联调。RGA、MPP 和实际 RTSP/MP4 输出也未接入，当前 Checksum packet 不是 H.264/AAC
+成品。
 
 ## 数据流
 
 ```text
-Mock/V4L2VideoCapture -> video queue -> ChecksumVideoEncoder --+
-                      -> inference queue -> MockInference       |
+Mock/V4L2VideoCapture -> video queue -> ChecksumVideoEncoder -------+
+                      -> inference queue -> Mock/RKNN Inference     |
                                                                +-> PacketRouter -> sinks
 Mock/AlsaAudioCapture  -> audio queue -> ChecksumAudioEncoder    +
 ```
@@ -108,6 +110,9 @@ RK3568 M5 板端基线、Sanitizer、SIGTERM、长稳和 systemd 的完整验收
 
 与板端 Runtime 1.4.0 匹配的开发文件、独立 AArch64 冒烟程序和验收边界见
 [RKNN 1.4.0 独立冒烟测试](docs/15-rknn-runtime-smoke-test.md)。
+
+YOLOv5s 转换、真实摄像头单帧检测、连续推理基线和主程序后端接入状态见
+[RKNN YOLOv5 主程序后端接入](docs/17-rknn-inference-engine-integration.md)。
 
 ## 目录说明
 

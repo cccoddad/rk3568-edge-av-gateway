@@ -5,6 +5,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 enum {
     RKAV_YOLOV5_OUTPUT_COUNT = 3,
     RKAV_YOLOV5_CLASS_COUNT = 80,
@@ -53,5 +57,9 @@ RkavYolov5Status RkavYolov5Postprocess(const RkavYolov5Config* config,
                                        RkavYolov5Result* result);
 
 const char* RkavYolov5ClassName(uint32_t class_id);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

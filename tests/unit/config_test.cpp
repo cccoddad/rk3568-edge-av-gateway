@@ -53,6 +53,30 @@ TEST(ConfigTest, ParsesAlsaDeviceAndCaptureTimeout) {
 #endif
 }
 
+TEST(ConfigTest, ParsesRknnInferenceContractFields) {
+    auto parsed = ConfigLoader::Parse(
+        R"({"inference":{"model_path":"/models/yolov5s.rknn","input_width":640,"input_height":640,"max_fps":5,"object_threshold":0.3,"nms_threshold":0.5,"max_detections":64}})");
+
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(parsed.value().inference.model_path, "/models/yolov5s.rknn");
+    EXPECT_EQ(parsed.value().inference.input_width, 640);
+    EXPECT_EQ(parsed.value().inference.input_height, 640);
+    EXPECT_EQ(parsed.value().inference.max_fps, 5);
+    EXPECT_FLOAT_EQ(parsed.value().inference.object_threshold, 0.3F);
+    EXPECT_FLOAT_EQ(parsed.value().inference.nms_threshold, 0.5F);
+    EXPECT_EQ(parsed.value().inference.max_detections, 64U);
+}
+
+TEST(ConfigTest, RejectsInvalidInferenceThresholds) {
+    AppConfig config;
+    config.outputs.emplace_back();
+    config.inference.object_threshold = 1.0F;
+
+    auto result = ConfigLoader::Validate(config);
+    ASSERT_FALSE(result);
+    EXPECT_EQ(result.error().operation, "inference");
+}
+
 // 缓冲数量少于 2 无法形成可靠的 V4L2 流水，必须在打开设备前拒绝。
 TEST(ConfigTest, RejectsTooFewV4l2MmapBuffers) {
     AppConfig config;

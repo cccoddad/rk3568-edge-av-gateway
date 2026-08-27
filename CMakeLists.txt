@@ -1,7 +1,7 @@
 # 文件作用：定义整个项目的库分层、第三方依赖、可执行程序、安装规则和测试入口。
 # 主要知识点：现代 CMake target、PUBLIC/PRIVATE 依赖传播、FetchContent 和特性开关。
 cmake_minimum_required(VERSION 3.20)
-project(rkav_gateway VERSION 0.1.0 LANGUAGES CXX)
+project(rkav_gateway VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -97,6 +97,46 @@ if(RKAV_WITH_ALSA)
     )
 endif()
 
+# RKNN 后端只在显式启用时查找锁定的 1.4.0 头文件和 AArch64 运行库。
+if(RKAV_WITH_RKNN)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR
+       NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+        message(FATAL_ERROR "RKAV_WITH_RKNN requires a Linux/aarch64 target")
+    endif()
+    set(RKNN_SDK_ROOT "" CACHE PATH "RK356X Linux librknn_api directory")
+    if(NOT RKNN_SDK_ROOT)
+        message(FATAL_ERROR "Set RKNN_SDK_ROOT to runtime/RK356X/Linux/librknn_api")
+    endif()
+    set(RKNN_INCLUDE_DIR "${RKNN_SDK_ROOT}/include")
+    set(RKNN_RUNTIME_LIBRARY "${RKNN_SDK_ROOT}/aarch64/librknnrt.so")
+    if(NOT EXISTS "${RKNN_INCLUDE_DIR}/rknn_api.h" OR
+       NOT EXISTS "${RKNN_RUNTIME_LIBRARY}")
+        message(FATAL_ERROR "RKNN 1.4.0 development files are incomplete under ${RKNN_SDK_ROOT}")
+    endif()
+
+    add_library(rkav_yolov5_postprocess
+        tools/rknn_smoke/yolov5_postprocess.c
+    )
+    target_include_directories(rkav_yolov5_postprocess PUBLIC tools/rknn_smoke)
+    target_compile_options(rkav_yolov5_postprocess PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror
+    )
+    target_link_libraries(rkav_yolov5_postprocess PUBLIC m)
+
+    add_library(rkav_rknn
+        src/vision/rknn/rknn_inference_engine.cpp
+    )
+    target_include_directories(rkav_rknn
+        PUBLIC include
+        PRIVATE "${RKNN_INCLUDE_DIR}"
+    )
+    target_link_libraries(rkav_rknn
+        PUBLIC rkav_core rkav_project_options
+        PRIVATE rkav_yolov5_postprocess "${RKNN_RUNTIME_LIBRARY}" rkav_project_warnings
+    )
+    set_target_properties(rkav_rknn PROPERTIES SKIP_BUILD_RPATH TRUE)
+endif()
+
 # rkav_app 负责管道组装、输出路由和生命周期。
 add_library(rkav_app
     src/app/application.cpp
@@ -117,15 +157,26 @@ endif()
 if(RKAV_WITH_ALSA)
     target_link_libraries(rkav_app PUBLIC rkav_alsa)
 endif()
+if(RKAV_WITH_RKNN)
+    target_link_libraries(rkav_app PUBLIC rkav_rknn)
+endif()
 
 # main 只负责进程入口，核心逻辑通过 rkav_app 复用和测试。
 add_executable(rkav-gateway app/main.cpp)
 target_link_libraries(rkav-gateway PRIVATE rkav_app rkav_project_warnings rkav_project_options)
+if(RKAV_WITH_RKNN)
+    # 板端只有 Buildroot 的旧 libstdc++，因此随程序静态携带 C++ 运行库；glibc 和 RKNN 保持动态。
+    target_link_options(rkav-gateway PRIVATE -static-libstdc++ -static-libgcc)
+    set_target_properties(rkav-gateway PROPERTIES SKIP_BUILD_RPATH TRUE)
+endif()
 
 install(TARGETS rkav-gateway RUNTIME DESTINATION bin)
 install(FILES config/mock.json DESTINATION etc/rkav)
 if(RKAV_WITH_V4L2)
     install(FILES config/rk3568-v4l2.json DESTINATION etc/rkav)
+endif()
+if(RKAV_WITH_RKNN)
+    install(FILES config/rk3568-rknn-rgb.json DESTINATION etc/rkav)
 endif()
 
 # 测试依赖只在显式启用时下载和编译，不影响最终板端最小构建。

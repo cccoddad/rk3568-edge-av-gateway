@@ -209,17 +209,24 @@ Result<void> ParseAudio(const Json& json, AudioConfig& config) {
 
 /// 功能：解析 Mock 推理尺寸、耗时、队列和结果有效期。
 Result<void> ParseInference(const Json& json, InferenceConfig& config) {
-    auto keys = RejectUnknownKeys(json, "inference",
-                                  {"backend", "mode", "input_width", "input_height", "latency_ms",
-                                   "queue_capacity", "overflow_policy", "max_result_age_ms"});
+    auto keys = RejectUnknownKeys(
+        json, "inference",
+        {"backend", "mode", "model_path", "input_width", "input_height", "latency_ms", "max_fps",
+         "object_threshold", "nms_threshold", "max_detections", "queue_capacity", "overflow_policy",
+         "max_result_age_ms"});
     if (!keys) {
         return keys;
     }
     config.backend = json.value("backend", config.backend);
     config.mode = json.value("mode", config.mode);
+    config.model_path = json.value("model_path", config.model_path);
     config.input_width = json.value("input_width", config.input_width);
     config.input_height = json.value("input_height", config.input_height);
     config.latency_ms = json.value("latency_ms", config.latency_ms);
+    config.max_fps = json.value("max_fps", config.max_fps);
+    config.object_threshold = json.value("object_threshold", config.object_threshold);
+    config.nms_threshold = json.value("nms_threshold", config.nms_threshold);
+    config.max_detections = json.value("max_detections", config.max_detections);
     config.queue_capacity = json.value("queue_capacity", config.queue_capacity);
     config.max_result_age_ms = json.value("max_result_age_ms", config.max_result_age_ms);
     if (json.contains("overflow_policy")) {
@@ -501,16 +508,39 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
         *config.audio.failure.xrun_every_blocks == 0U) {
         return fail("audio.failure.xrun_every_blocks", "must be greater than zero when set");
     }
-    if (config.inference.backend != "mock") {
-        return fail("inference.backend", "requested backend is not implemented in this build");
+    if (config.inference.backend == "mock") {
+#if !RKAV_ENABLE_MOCK
+        return fail("inference.backend", "mock inference backend is not compiled in");
+#endif
+    } else if (config.inference.backend == "rknn") {
+#if RKAV_WITH_RKNN
+        if (config.inference.model_path.empty()) {
+            return fail("inference.model_path", "RKNN backend requires a model path");
+        }
+        if (config.inference.mode != "yolov5") {
+            return fail("inference.mode", "RKNN backend currently supports yolov5 only");
+        }
+#else
+        return fail("inference.backend", "RKNN inference backend is not compiled in");
+#endif
+    } else {
+        return fail("inference.backend", "expected 'mock' or 'rknn'");
     }
     if (config.inference.input_width <= 0 || config.inference.input_height <= 0) {
         return fail("inference", "input dimensions must be positive");
     }
-    if (config.inference.latency_ms < 0 || config.inference.queue_capacity == 0U ||
+    if (config.inference.latency_ms < 0 || config.inference.max_fps < 0 ||
+        config.inference.max_fps > 120 || config.inference.queue_capacity == 0U ||
         config.inference.queue_capacity > 4096U || config.inference.max_result_age_ms < 0) {
         return fail("inference",
-                    "latency/age must be non-negative and queue capacity must be in [1, 4096]");
+                    "latency/age/fps must be in range and queue capacity must be in [1, 4096]");
+    }
+    if (config.inference.object_threshold <= 0.0F || config.inference.object_threshold >= 1.0F ||
+        config.inference.nms_threshold <= 0.0F || config.inference.nms_threshold >= 1.0F) {
+        return fail("inference", "object and NMS thresholds must be in range (0, 1)");
+    }
+    if (config.inference.max_detections == 0U || config.inference.max_detections > 4096U) {
+        return fail("inference.max_detections", "expected value in range [1, 4096]");
     }
     if (config.video_encoder.backend != "checksum" ||
         config.video_encoder.mock_keyframe_interval <= 0) {
@@ -595,6 +625,7 @@ std::string ConfigSummary(const AppConfig& config) {
         {"inference",
          {{"backend", config.inference.backend},
           {"latency_ms", config.inference.latency_ms},
+          {"max_fps", config.inference.max_fps},
           {"queue_capacity", config.inference.queue_capacity},
           {"overflow_policy", ToString(config.inference.overflow_policy)}}}};
     return summary.dump();
