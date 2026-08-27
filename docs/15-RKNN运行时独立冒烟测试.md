@@ -126,4 +126,4 @@ LD_LIBRARY_PATH=/usr/lib rknn-smoke model.rknn 1 input-224x224-rgb.bin
 项目下一阶段按既定方案选择与 Runtime 1.4.0 兼容的目标检测模型，输出检测框、类别和置信度。
 
 后续 YOLOv5s 模型转换、板端三路输出验证和 C17 后处理实现见
-[RK3568 YOLOv5s RKNN 目标检测验证](16-yolov5-rknn-detection-validation.md)。
+[RK3568 YOLOv5s RKNN 目标检测验证](16-RK3568-YOLOv5目标检测验证.md)。

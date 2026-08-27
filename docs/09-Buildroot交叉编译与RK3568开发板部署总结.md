@@ -45,7 +45,7 @@ Buildroot 板卡”的完整实现、证据和后续计划。
 - `tools/signal_test.sh`：向持续运行的进程发送 SIGTERM，检查退出码和停止原因。
 - `tools/soak_test.sh`：长稳期间采集 RSS、CPU 和温度，并保留网关日志。
 - `tools/m5_board_validation.sh`：编排原生 Debug、Sanitizer、Release、信号和长稳验收。
-- `docs/08-m5-board-validation.md`：说明标准 Linux/systemd 环境下的 M5 操作。
+- `docs/08-RK3568开发板M5阶段验收.md`：说明标准 Linux/systemd 环境下的 M5 操作。
 - 修正 systemd unit 的安装后配置路径。
 
 这些脚本仍适用于具备 CMake、编译器和常规 GNU/Linux 工具的板端环境。当前粤嵌 Buildroot
@@ -335,9 +335,9 @@ V4L2 摄像头 -> ALSA 麦克风 -> RKNN -> RGA -> MPP H.264 -> AAC -> MP4 -> RT
 
 ## 8. 相关文档
 
-- [整体代码架构](./Project%20Execution%20Log/01-overall-code-architecture.md)
-- [项目实现总结与后续计划](./Project%20Execution%20Log/05-项目实现总结与后续计划.md)
+- [整体代码架构](./01-项目总体代码架构.md)
+- [项目实现总结与后续计划](./05-项目初期实现总结与后续计划.md)
 - [项目问题汇总：面试版](./06-项目问题汇总-面试版.md)
 - [项目问题汇总：通俗版](./07-项目问题汇总-通俗版.md)
 - [板端联调阶段实现复盘与下一步](./10-板端联调阶段实现复盘与下一步.md)
-- [M5 RK3568 板端验收](./08-m5-board-validation.md)
+- [M5 RK3568 板端验收](./08-RK3568开发板M5阶段验收.md)

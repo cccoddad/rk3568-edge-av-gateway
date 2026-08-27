@@ -100,19 +100,22 @@ sh ./tools/soak_test.sh 1800
 ```
 
 RK3568 M5 板端基线、Sanitizer、SIGTERM、长稳和 systemd 的完整验收步骤见
-[M5 板端验收](docs/08-m5-board-validation.md)。
+[M5 板端验收](docs/08-RK3568开发板M5阶段验收.md)。
 
-当前粤嵌 Buildroot 的交叉编译、直连网络、SSH 部署、实测指标和下一步见
-[Buildroot 交叉编译与 RK3568 上板阶段总结](docs/09-buildroot-cross-compile-and-board-bringup-summary.md)。
+当前粤嵌 Buildroot 的交叉编译、直连网络、TF 卡部署、实测指标和下一步见
+[Buildroot 交叉编译与 RK3568 上板阶段总结](docs/09-Buildroot交叉编译与RK3568开发板部署总结.md)。
 
 真实绿联摄像头和麦克风的 VID/PID、格式、样本与持续采集证据见
-[UGREEN 2K USB 音视频设备验收](docs/11-ugreen-camera-and-microphone-validation.md)。
+[绿联 2K USB 音视频设备验收](docs/11-绿联摄像头与麦克风验收.md)。
 
 与板端 Runtime 1.4.0 匹配的开发文件、独立 AArch64 冒烟程序和验收边界见
-[RKNN 1.4.0 独立冒烟测试](docs/15-rknn-runtime-smoke-test.md)。
+[RKNN 1.4.0 独立冒烟测试](docs/15-RKNN运行时独立冒烟测试.md)。
 
 YOLOv5s 转换、真实摄像头单帧检测、连续推理基线和主程序后端接入状态见
-[RKNN YOLOv5 主程序后端接入](docs/17-rknn-inference-engine-integration.md)。
+[RKNN YOLOv5 主程序后端接入](docs/17-RKNN-YOLOv5主程序后端接入.md)。
+
+本轮完整实现清单、精确停止位置和下一次会话可直接执行的命令见
+[本次会话实现总结与下一步](docs/18-本次会话实现总结与下一步.md)。
 
 ## 目录说明
 
@@ -135,7 +138,7 @@ YOLOv5s 转换、真实摄像头单帧检测、连续推理基线和主程序后
 
 配置采用严格字段检查。字段拼错、类型错误、范围错误、选择未编译后端或没有可用输出
 都会在启动线程前失败。详细字段见
-[配置说明](docs/Project%20Execution%20Log/04-configuration.md)。
+[配置说明](docs/04-项目配置说明.md)。
 
 日志每行是一个 JSON 对象，可按 `module`、`event`、`level` 搜索。周期指标包括总帧数、
 包数、错误、恢复次数、阶段延迟分位数和各队列高水位/丢弃数。禁止在每帧路径打印
@@ -146,4 +149,4 @@ INFO 日志，以免日志 I/O 干扰实时链路。
 接入顺序固定为 V4L2 摄像头、ALSA 麦克风、RKNN、RGA/MPP、实际封装与网络输出；一次
 只替换一个 Mock 后端，并保持全部现有测试通过。Rockchip SDK 类型不得进入
 `rkav_core` 公共头文件。当前限制和下一步见
-[开发状态](docs/Project%20Execution%20Log/03-current-development-status.md)。
+[开发状态](docs/19-项目当前开发状态.md)。
