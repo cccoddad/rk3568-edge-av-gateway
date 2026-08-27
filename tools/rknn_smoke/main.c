@@ -9,11 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "arguments.h"
 #include "yolov5_postprocess.h"
 
 enum {
-    RKAV_DEFAULT_ITERATIONS = 1,
-    RKAV_MAXIMUM_ITERATIONS = 100000,
     RKAV_MAXIMUM_TENSOR_COUNT = 256,
     RKAV_TOP_RESULT_COUNT = 5,
     RKAV_MAXIMUM_DETECTION_COUNT = 256,
@@ -27,18 +26,6 @@ typedef struct {
 static int PrintRknnError(const char* operation, int code) {
     fprintf(stderr, "error operation=%s rknn_code=%d\n", operation, code);
     return 1;
-}
-
-static bool ParseIterations(const char* text, uint32_t* value) {
-    char* end = NULL;
-    errno = 0;
-    const unsigned long parsed = strtoul(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0' || parsed == 0UL ||
-        parsed > RKAV_MAXIMUM_ITERATIONS) {
-        return false;
-    }
-    *value = (uint32_t)parsed;
-    return true;
 }
 
 static bool ReadModel(const char* path, RkavModel* model) {
@@ -519,16 +506,16 @@ cleanup:
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 2 || argc > 4) {
+    RkavArguments arguments = {0};
+    const RkavArgumentsStatus argument_status = RkavParseArguments(argc, argv, &arguments);
+    if (argument_status == RKAV_ARGUMENTS_USAGE_ERROR) {
         fprintf(stderr, "Usage: rknn-smoke <model.rknn> [iterations] [input.rgb]\n");
         return 2;
     }
-    uint32_t iterations = RKAV_DEFAULT_ITERATIONS;
-    if (argc == 3 && !ParseIterations(argv[2], &iterations)) {
+    if (argument_status == RKAV_ARGUMENTS_INVALID_ITERATIONS) {
         fprintf(stderr, "iterations must be an integer in range [1, %d]\n",
                 RKAV_MAXIMUM_ITERATIONS);
         return 2;
     }
-    const char* input_path = argc == 4 ? argv[3] : NULL;
-    return Run(argv[1], iterations, input_path);
+    return Run(arguments.model_path, arguments.iterations, arguments.input_path);
 }

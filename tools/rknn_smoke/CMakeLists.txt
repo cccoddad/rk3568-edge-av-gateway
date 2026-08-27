@@ -27,6 +27,7 @@ endif()
 find_package(Threads REQUIRED)
 
 add_executable(rknn-smoke
+    arguments.c
     main.c
     yolov5_postprocess.c
 )
