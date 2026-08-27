@@ -47,12 +47,10 @@ typedef enum {
     RKAV_YOLOV5_ALLOCATION_FAILED = 3,
 } RkavYolov5Status;
 
-RkavYolov5Status RkavYolov5Postprocess(
-    const RkavYolov5Config* config,
-    const RkavYolov5Output outputs[RKAV_YOLOV5_OUTPUT_COUNT],
-    RkavYolov5Detection* detections,
-    size_t detection_capacity,
-    RkavYolov5Result* result);
+RkavYolov5Status RkavYolov5Postprocess(const RkavYolov5Config* config,
+                                       const RkavYolov5Output outputs[RKAV_YOLOV5_OUTPUT_COUNT],
+                                       RkavYolov5Detection* detections, size_t detection_capacity,
+                                       RkavYolov5Result* result);
 
 const char* RkavYolov5ClassName(uint32_t class_id);
 

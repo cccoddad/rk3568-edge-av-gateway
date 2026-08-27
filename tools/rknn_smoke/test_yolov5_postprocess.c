@@ -1,8 +1,8 @@
-#include "yolov5_postprocess.h"
-
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "yolov5_postprocess.h"
 
 enum {
     kChannels = 255,
@@ -29,9 +29,9 @@ static size_t Index(const RkavYolov5Output* output, uint32_t anchor, uint32_t va
     return (channel * output->height + row) * output->width + column;
 }
 
-static void SetCandidate(RkavYolov5Output* output, uint32_t anchor, uint32_t row,
-                         uint32_t column, float x, float y, float width, float height,
-                         float object, uint32_t class_id, float class_score) {
+static void SetCandidate(RkavYolov5Output* output, uint32_t anchor, uint32_t row, uint32_t column,
+                         float x, float y, float width, float height, float object,
+                         uint32_t class_id, float class_score) {
     float* data = (float*)output->data;
     data[Index(output, anchor, 0U, row, column)] = x;
     data[Index(output, anchor, 1U, row, column)] = y;
@@ -58,8 +58,7 @@ int main(void) {
     }
 
     SetCandidate(&outputs[0], 0U, 10U, 20U, 0.0F, 0.0F, 0.0F, 0.0F, 4.0F, 0U, 3.0F);
-    SetCandidate(&outputs[0], 0U, 10U, 21U, -2.7080502F, 0.0F, 0.0F, 0.0F, 2.0F,
-                 0U, 2.0F);
+    SetCandidate(&outputs[0], 0U, 10U, 21U, -2.7080502F, 0.0F, 0.0F, 0.0F, 2.0F, 0U, 2.0F);
     SetCandidate(&outputs[1], 0U, 12U, 10U, 0.0F, 0.0F, 0.0F, 0.0F, 3.0F, 5U, 2.5F);
 
     const RkavYolov5Config config = {
@@ -70,8 +69,7 @@ int main(void) {
     };
     RkavYolov5Detection detections[8] = {0};
     RkavYolov5Result result = {0};
-    Require(RkavYolov5Postprocess(&config, outputs, detections, 8U, &result) ==
-                RKAV_YOLOV5_OK,
+    Require(RkavYolov5Postprocess(&config, outputs, detections, 8U, &result) == RKAV_YOLOV5_OK,
             "postprocess succeeds");
     Require(result.candidate_count == 3U, "three candidates");
     Require(result.selected_count == 2U, "nms selects two");
@@ -87,12 +85,11 @@ int main(void) {
     Require(RkavYolov5ClassName(5U)[0] == 'b', "bus class name");
 
     RkavYolov5Result truncated = {0};
-    Require(RkavYolov5Postprocess(&config, outputs, detections, 1U, &truncated) ==
-                RKAV_YOLOV5_OK,
+    Require(RkavYolov5Postprocess(&config, outputs, detections, 1U, &truncated) == RKAV_YOLOV5_OK,
             "truncated postprocess succeeds");
-    Require(truncated.selected_count == 2U && truncated.detection_count == 1U &&
-                truncated.truncated,
-            "truncation is reported");
+    Require(
+        truncated.selected_count == 2U && truncated.detection_count == 1U && truncated.truncated,
+        "truncation is reported");
 
     const uint32_t original_width = outputs[0].width;
     outputs[0].width = 79U;

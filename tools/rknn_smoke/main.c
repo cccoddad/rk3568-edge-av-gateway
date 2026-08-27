@@ -249,8 +249,8 @@ static bool PrintOutputSummary(uint32_t iteration, const rknn_output* outputs,
 }
 
 static bool IsYolov5Contract(const rknn_tensor_attr* input_attributes, uint32_t input_count,
-                             const rknn_tensor_attr* output_attributes,
-                             uint32_t output_count, const rknn_output* outputs) {
+                             const rknn_tensor_attr* output_attributes, uint32_t output_count,
+                             const rknn_output* outputs) {
     if (input_count != 1U || output_count != RKAV_YOLOV5_OUTPUT_COUNT) {
         return false;
     }
@@ -264,9 +264,9 @@ static bool IsYolov5Contract(const rknn_tensor_attr* input_attributes, uint32_t 
     const uint32_t grid_sizes[RKAV_YOLOV5_OUTPUT_COUNT] = {80U, 40U, 20U};
     for (uint32_t output_index = 0U; output_index < output_count; ++output_index) {
         const rknn_tensor_attr* attribute = &output_attributes[output_index];
-        if (attribute->n_dims != 4U || attribute->dims[0] != 1U ||
-            attribute->dims[1] != 255U || attribute->dims[2] != attribute->dims[3] ||
-            attribute->fmt != RKNN_TENSOR_NCHW || outputs[output_index].buf == NULL ||
+        if (attribute->n_dims != 4U || attribute->dims[0] != 1U || attribute->dims[1] != 255U ||
+            attribute->dims[2] != attribute->dims[3] || attribute->fmt != RKNN_TENSOR_NCHW ||
+            outputs[output_index].buf == NULL ||
             outputs[output_index].size != attribute->n_elems * sizeof(float)) {
             return false;
         }
@@ -285,10 +285,8 @@ static bool IsYolov5Contract(const rknn_tensor_attr* input_attributes, uint32_t 
     return true;
 }
 
-static bool PrintYolov5Detections(uint32_t iteration,
-                                  const rknn_tensor_attr* input_attributes,
-                                  uint32_t input_count,
-                                  const rknn_tensor_attr* output_attributes,
+static bool PrintYolov5Detections(uint32_t iteration, const rknn_tensor_attr* input_attributes,
+                                  uint32_t input_count, const rknn_tensor_attr* output_attributes,
                                   uint32_t output_count, const rknn_output* outputs) {
     if (!IsYolov5Contract(input_attributes, input_count, output_attributes, output_count,
                           outputs)) {
@@ -310,12 +308,10 @@ static bool PrintYolov5Detections(uint32_t iteration,
     };
     RkavYolov5Detection detections[RKAV_MAXIMUM_DETECTION_COUNT] = {0};
     RkavYolov5Result result = {0};
-    const RkavYolov5Status postprocess_status =
-        RkavYolov5Postprocess(&config, yolov5_outputs, detections,
-                              RKAV_MAXIMUM_DETECTION_COUNT, &result);
+    const RkavYolov5Status postprocess_status = RkavYolov5Postprocess(
+        &config, yolov5_outputs, detections, RKAV_MAXIMUM_DETECTION_COUNT, &result);
     if (postprocess_status != RKAV_YOLOV5_OK) {
-        fprintf(stderr, "error operation=yolov5_postprocess status=%d\n",
-                (int)postprocess_status);
+        fprintf(stderr, "error operation=yolov5_postprocess status=%d\n", (int)postprocess_status);
         return false;
     }
 
@@ -327,13 +323,12 @@ static bool PrintYolov5Detections(uint32_t iteration,
            (double)config.nms_threshold);
     for (size_t index = 0U; index < result.detection_count; ++index) {
         const RkavYolov5Detection* detection = &detections[index];
-        printf("detection iteration=%" PRIu32
-               " rank=%zu class_id=%" PRIu32 " class=%s confidence=%.8g"
+        printf("detection iteration=%" PRIu32 " rank=%zu class_id=%" PRIu32
+               " class=%s confidence=%.8g"
                " left=%.3f top=%.3f right=%.3f bottom=%.3f\n",
-               iteration, index + 1U, detection->class_id,
-               RkavYolov5ClassName(detection->class_id), (double)detection->confidence,
-               (double)detection->left, (double)detection->top, (double)detection->right,
-               (double)detection->bottom);
+               iteration, index + 1U, detection->class_id, RkavYolov5ClassName(detection->class_id),
+               (double)detection->confidence, (double)detection->left, (double)detection->top,
+               (double)detection->right, (double)detection->bottom);
     }
     return true;
 }
@@ -487,10 +482,9 @@ static int Run(const char* model_path, uint32_t iterations, const char* input_pa
 
         const bool should_print = iteration == 1U || iteration == iterations;
         const bool summary_valid =
-            !should_print ||
-            (PrintOutputSummary(iteration, outputs, counts.n_output) &&
-             PrintYolov5Detections(iteration, input_attributes, counts.n_input,
-                                   output_attributes, counts.n_output, outputs));
+            !should_print || (PrintOutputSummary(iteration, outputs, counts.n_output) &&
+                              PrintYolov5Detections(iteration, input_attributes, counts.n_input,
+                                                    output_attributes, counts.n_output, outputs));
         const int release_result = rknn_outputs_release(context, counts.n_output, outputs);
         memset(outputs, 0, counts.n_output * sizeof(*outputs));
         if (release_result != RKNN_SUCC) {

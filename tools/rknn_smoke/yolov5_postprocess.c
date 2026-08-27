@@ -6,8 +6,7 @@
 enum {
     RKAV_YOLOV5_ANCHORS_PER_OUTPUT = 3,
     RKAV_YOLOV5_VALUES_PER_ANCHOR = 5 + RKAV_YOLOV5_CLASS_COUNT,
-    RKAV_YOLOV5_CHANNEL_COUNT =
-        RKAV_YOLOV5_ANCHORS_PER_OUTPUT * RKAV_YOLOV5_VALUES_PER_ANCHOR,
+    RKAV_YOLOV5_CHANNEL_COUNT = RKAV_YOLOV5_ANCHORS_PER_OUTPUT * RKAV_YOLOV5_VALUES_PER_ANCHOR,
 };
 
 typedef struct {
@@ -22,22 +21,26 @@ static const float kAnchors[RKAV_YOLOV5_OUTPUT_COUNT][RKAV_YOLOV5_ANCHORS_PER_OU
 };
 
 static const char* const kClassNames[RKAV_YOLOV5_CLASS_COUNT] = {
-    "person",       "bicycle",      "car",           "motorbike",    "aeroplane",
-    "bus",          "train",        "truck",         "boat",         "traffic_light",
-    "fire_hydrant", "stop_sign",    "parking_meter", "bench",        "bird",
-    "cat",          "dog",          "horse",         "sheep",        "cow",
-    "elephant",     "bear",         "zebra",         "giraffe",      "backpack",
-    "umbrella",     "handbag",      "tie",           "suitcase",     "frisbee",
-    "skis",         "snowboard",    "sports_ball",   "kite",         "baseball_bat",
-    "baseball_glove", "skateboard", "surfboard",     "tennis_racket", "bottle",
-    "wine_glass",   "cup",          "fork",          "knife",        "spoon",
-    "bowl",         "banana",       "apple",         "sandwich",     "orange",
-    "broccoli",     "carrot",       "hot_dog",       "pizza",        "donut",
-    "cake",         "chair",        "sofa",          "pottedplant",  "bed",
-    "diningtable",  "toilet",       "tvmonitor",     "laptop",       "mouse",
-    "remote",       "keyboard",     "cell_phone",    "microwave",    "oven",
-    "toaster",      "sink",         "refrigerator",  "book",         "clock",
-    "vase",         "scissors",     "teddy_bear",    "hair_drier",   "toothbrush",
+    "person",        "bicycle",       "car",           "motorbike",
+    "aeroplane",     "bus",           "train",         "truck",
+    "boat",          "traffic_light", "fire_hydrant",  "stop_sign",
+    "parking_meter", "bench",         "bird",          "cat",
+    "dog",           "horse",         "sheep",         "cow",
+    "elephant",      "bear",          "zebra",         "giraffe",
+    "backpack",      "umbrella",      "handbag",       "tie",
+    "suitcase",      "frisbee",       "skis",          "snowboard",
+    "sports_ball",   "kite",          "baseball_bat",  "baseball_glove",
+    "skateboard",    "surfboard",     "tennis_racket", "bottle",
+    "wine_glass",    "cup",           "fork",          "knife",
+    "spoon",         "bowl",          "banana",        "apple",
+    "sandwich",      "orange",        "broccoli",      "carrot",
+    "hot_dog",       "pizza",         "donut",         "cake",
+    "chair",         "sofa",          "pottedplant",   "bed",
+    "diningtable",   "toilet",        "tvmonitor",     "laptop",
+    "mouse",         "remote",        "keyboard",      "cell_phone",
+    "microwave",     "oven",          "toaster",       "sink",
+    "refrigerator",  "book",          "clock",         "vase",
+    "scissors",      "teddy_bear",    "hair_drier",    "toothbrush",
 };
 
 static float Sigmoid(float value) {
@@ -58,10 +61,9 @@ static float Clamp(float value, float minimum, float maximum) {
     return value;
 }
 
-static size_t TensorIndex(const RkavYolov5Output* output, uint32_t anchor,
-                          uint32_t value_index, uint32_t row, uint32_t column) {
-    const size_t channel =
-        (size_t)anchor * RKAV_YOLOV5_VALUES_PER_ANCHOR + value_index;
+static size_t TensorIndex(const RkavYolov5Output* output, uint32_t anchor, uint32_t value_index,
+                          uint32_t row, uint32_t column) {
+    const size_t channel = (size_t)anchor * RKAV_YOLOV5_VALUES_PER_ANCHOR + value_index;
     return (channel * output->height + row) * output->width + column;
 }
 
@@ -101,8 +103,7 @@ static float IntersectionOverUnion(const RkavYolov5Detection* left,
     const float intersection_top = fmaxf(left->top, right->top);
     const float intersection_right = fminf(left->right, right->right);
     const float intersection_bottom = fminf(left->bottom, right->bottom);
-    const float intersection_width =
-        fmaxf(0.0F, intersection_right - intersection_left + 0.00001F);
+    const float intersection_width = fmaxf(0.0F, intersection_right - intersection_left + 0.00001F);
     const float intersection_height =
         fmaxf(0.0F, intersection_bottom - intersection_top + 0.00001F);
     const float intersection_area = intersection_width * intersection_height;
@@ -131,11 +132,10 @@ static bool ResolveScale(const RkavYolov5Config* config, const RkavYolov5Output*
     return false;
 }
 
-RkavYolov5Status RkavYolov5Postprocess(
-    const RkavYolov5Config* config,
-    const RkavYolov5Output outputs[RKAV_YOLOV5_OUTPUT_COUNT],
-    RkavYolov5Detection* detections, size_t detection_capacity,
-    RkavYolov5Result* result) {
+RkavYolov5Status RkavYolov5Postprocess(const RkavYolov5Config* config,
+                                       const RkavYolov5Output outputs[RKAV_YOLOV5_OUTPUT_COUNT],
+                                       RkavYolov5Detection* detections, size_t detection_capacity,
+                                       RkavYolov5Result* result) {
     if (config == NULL || outputs == NULL || detections == NULL || result == NULL ||
         detection_capacity == 0U || config->image_width == 0U || config->image_height == 0U ||
         !isfinite(config->object_threshold) || config->object_threshold <= 0.0F ||
@@ -176,8 +176,8 @@ RkavYolov5Status RkavYolov5Postprocess(
         for (uint32_t row = 0U; row < output->height; ++row) {
             for (uint32_t column = 0U; column < output->width; ++column) {
                 for (uint32_t anchor = 0U; anchor < RKAV_YOLOV5_ANCHORS_PER_OUTPUT; ++anchor) {
-                    const float object_logit = output->data[
-                        TensorIndex(output, anchor, 4U, row, column)];
+                    const float object_logit =
+                        output->data[TensorIndex(output, anchor, 4U, row, column)];
                     if (!isfinite(object_logit)) {
                         continue;
                     }
@@ -189,8 +189,8 @@ RkavYolov5Status RkavYolov5Postprocess(
                     uint32_t best_class = 0U;
                     float best_class_probability = -1.0F;
                     for (uint32_t class_id = 0U; class_id < RKAV_YOLOV5_CLASS_COUNT; ++class_id) {
-                        const float class_logit = output->data[
-                            TensorIndex(output, anchor, 5U + class_id, row, column)];
+                        const float class_logit =
+                            output->data[TensorIndex(output, anchor, 5U + class_id, row, column)];
                         if (!isfinite(class_logit)) {
                             continue;
                         }
@@ -204,14 +204,14 @@ RkavYolov5Status RkavYolov5Postprocess(
                         continue;
                     }
 
-                    const float x_logit = output->data[
-                        TensorIndex(output, anchor, 0U, row, column)];
-                    const float y_logit = output->data[
-                        TensorIndex(output, anchor, 1U, row, column)];
-                    const float width_logit = output->data[
-                        TensorIndex(output, anchor, 2U, row, column)];
-                    const float height_logit = output->data[
-                        TensorIndex(output, anchor, 3U, row, column)];
+                    const float x_logit =
+                        output->data[TensorIndex(output, anchor, 0U, row, column)];
+                    const float y_logit =
+                        output->data[TensorIndex(output, anchor, 1U, row, column)];
+                    const float width_logit =
+                        output->data[TensorIndex(output, anchor, 2U, row, column)];
+                    const float height_logit =
+                        output->data[TensorIndex(output, anchor, 3U, row, column)];
                     if (!isfinite(x_logit) || !isfinite(y_logit) || !isfinite(width_logit) ||
                         !isfinite(height_logit)) {
                         continue;
@@ -223,7 +223,8 @@ RkavYolov5Status RkavYolov5Postprocess(
                         (Sigmoid(y_logit) * 2.0F - 0.5F + (float)row) * stride_y[output_index];
                     const float scaled_width = Sigmoid(width_logit) * 2.0F;
                     const float scaled_height = Sigmoid(height_logit) * 2.0F;
-                    const float width = scaled_width * scaled_width * kAnchors[scale_index][anchor][0];
+                    const float width =
+                        scaled_width * scaled_width * kAnchors[scale_index][anchor][0];
                     const float height =
                         scaled_height * scaled_height * kAnchors[scale_index][anchor][1];
 
@@ -231,8 +232,8 @@ RkavYolov5Status RkavYolov5Postprocess(
                         .left = Clamp(center_x - width * 0.5F, 0.0F, (float)config->image_width),
                         .top = Clamp(center_y - height * 0.5F, 0.0F, (float)config->image_height),
                         .right = Clamp(center_x + width * 0.5F, 0.0F, (float)config->image_width),
-                        .bottom = Clamp(center_y + height * 0.5F, 0.0F,
-                                        (float)config->image_height),
+                        .bottom =
+                            Clamp(center_y + height * 0.5F, 0.0F, (float)config->image_height),
                         .confidence = object_probability * best_class_probability,
                         .class_id = best_class,
                     };
@@ -261,8 +262,8 @@ RkavYolov5Status RkavYolov5Postprocess(
         for (size_t other = index + 1U; other < candidate_count; ++other) {
             if (!candidates[other].suppressed &&
                 candidates[other].detection.class_id == candidates[index].detection.class_id &&
-                IntersectionOverUnion(&candidates[index].detection,
-                                      &candidates[other].detection) > config->nms_threshold) {
+                IntersectionOverUnion(&candidates[index].detection, &candidates[other].detection) >
+                    config->nms_threshold) {
                 candidates[other].suppressed = true;
             }
         }
