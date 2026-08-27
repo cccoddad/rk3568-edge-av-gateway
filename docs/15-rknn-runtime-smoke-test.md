@@ -124,3 +124,6 @@ LD_LIBRARY_PATH=/usr/lib rknn-smoke model.rknn 1 input-224x224-rgb.bin
 至此已经证明真实摄像头数据可以完成抓取、JPEG 解码、缩放、RGB 转换和 RKNN/NPU 推理。
 当前模型仍是整图分类模型，最高分较低且板端没有类别表；这些索引不作为可靠业务识别结果。
 项目下一阶段按既定方案选择与 Runtime 1.4.0 兼容的目标检测模型，输出检测框、类别和置信度。
+
+后续 YOLOv5s 模型转换、板端三路输出验证和 C17 后处理实现见
+[RK3568 YOLOv5s RKNN 目标检测验证](16-yolov5-rknn-detection-validation.md)。

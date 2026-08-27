@@ -66,6 +66,8 @@ jobs:
         run: >-
           sudo apt-get update && sudo apt-get install -y
           curl gcc-aarch64-linux-gnu ninja-build file binutils-aarch64-linux-gnu
+      - name: Test YOLOv5 postprocessing
+        run: sh ./tools/test_yolov5_postprocess.sh
       - name: Fetch pinned RKNN 1.4.0 development files
         run: sh ./tools/fetch_rknn_sdk.sh "$RUNNER_TEMP/rknpu2-v1.4.0"
       - name: Cross-build RKNN smoke test

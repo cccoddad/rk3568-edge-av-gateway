@@ -26,12 +26,16 @@ endif()
 
 find_package(Threads REQUIRED)
 
-add_executable(rknn-smoke main.c)
+add_executable(rknn-smoke
+    main.c
+    yolov5_postprocess.c
+)
 target_include_directories(rknn-smoke PRIVATE "${RKNN_INCLUDE_DIR}")
 target_link_libraries(rknn-smoke PRIVATE
     "${RKNN_RUNTIME_LIBRARY}"
     Threads::Threads
     ${CMAKE_DL_LIBS}
+    m
 )
 target_compile_options(rknn-smoke PRIVATE
     -Wall
