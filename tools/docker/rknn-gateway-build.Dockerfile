@@ -4,6 +4,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        binutils \
         binutils-aarch64-linux-gnu \
         ca-certificates \
         cmake \
