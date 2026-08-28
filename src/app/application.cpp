@@ -20,6 +20,9 @@
 #endif
 #include "rkav/common/logger.h"
 #include "rkav/media/checksum_encoder.h"
+#if RKAV_WITH_JPEG
+#include "rkav/media/jpeg_video_decoder.h"
+#endif
 #include "rkav/output/sinks.h"
 #include "rkav/vision/mock_inference_engine.h"
 
@@ -202,8 +205,27 @@ Result<void> Application::CreateAndOpenBackends() {
                             {"height", std::to_string(video_opened.value().height)},
                             {"fps", std::to_string(video_opened.value().fps)},
                             {"format", ToString(video_opened.value().format)}});
+    if (config_.inference.backend == "rknn" &&
+        video_opened.value().format == PixelFormat::kMjpeg) {
+#if RKAV_WITH_JPEG
+        video_decoder_ = std::make_unique<JpegVideoDecoder>();
+        auto decoder_opened = video_decoder_->Open();
+        if (!decoder_opened) {
+            video_capture_->Close();
+            return decoder_opened;
+        }
+#else
+        video_capture_->Close();
+        return Result<void>::Failure(
+            AppError(ErrorCategory::kNotSupported, "open_video_decoder",
+                     "MJPEG input with RKNN requires the JPEG decoder feature"));
+#endif
+    }
     auto audio_opened = audio_capture_->Open(config_.audio);  // 音频后端打开/协商结果。
     if (!audio_opened) {
+        if (video_decoder_) {
+            video_decoder_->Close();
+        }
         video_capture_->Close();
         return Result<void>::Failure(audio_opened.error());
     }
@@ -219,6 +241,9 @@ Result<void> Application::CreateAndOpenBackends() {
     auto model_opened = inference_->Open(config_.inference);  // 推理模型初始化结果。
     if (!model_opened) {
         audio_capture_->Close();
+        if (video_decoder_) {
+            video_decoder_->Close();
+        }
         video_capture_->Close();
         return Result<void>::Failure(model_opened.error());
     }
@@ -227,6 +252,9 @@ Result<void> Application::CreateAndOpenBackends() {
     if (!video_encoder_opened) {
         inference_->Close();
         audio_capture_->Close();
+        if (video_decoder_) {
+            video_decoder_->Close();
+        }
         video_capture_->Close();
         return video_encoder_opened;
     }
@@ -236,6 +264,9 @@ Result<void> Application::CreateAndOpenBackends() {
         video_encoder_->Close();
         inference_->Close();
         audio_capture_->Close();
+        if (video_decoder_) {
+            video_decoder_->Close();
+        }
         video_capture_->Close();
         return audio_encoder_opened;
     }
@@ -355,6 +386,9 @@ void Application::StopWorkers(CloseMode mode) noexcept {
     }
     if (inference_) {
         inference_->Close();
+    }
+    if (video_decoder_) {
+        video_decoder_->Close();
     }
     if (video_encoder_) {
         video_encoder_->Close();
@@ -548,9 +582,30 @@ void Application::InferenceLoop(std::stop_token stop) {
         if (popped.status != QueueStatus::kOk || !popped.item.has_value()) {
             break;
         }
+        VideoFrame inference_frame = std::move(*popped.item);  // 解码后交给推理的来源帧。
+        if (inference_frame.format == PixelFormat::kMjpeg) {
+            if (!video_decoder_) {
+                ReportFatal(AppError(ErrorCategory::kNotSupported, "decode_video",
+                                     "MJPEG inference frame has no configured decoder"));
+                break;
+            }
+            const TimestampUs decode_started = clock_->NowUs();
+            auto decoded = video_decoder_->Decode(inference_frame);
+            metrics_.ObserveLatency("video_decode", clock_->NowUs() - decode_started);
+            if (!decoded) {
+                inference_health_.MarkError(clock_->NowUs());
+                LogWorkerError("video_decode", decoded.error());
+                if (!decoded.error().retryable) {
+                    ReportFatal(decoded.error());
+                    break;
+                }
+                continue;
+            }
+            inference_frame = std::move(decoded).value();
+        }
         metrics_.Increment(MetricCounter::kInferenceRequests);
         const TimestampUs started = clock_->NowUs();  // 本次推理开始时间，单位微秒。
-        auto result = inference_->Infer(*popped.item, stop);  // 推理后端返回结果。
+        auto result = inference_->Infer(inference_frame, stop);  // 推理后端返回结果。
         metrics_.ObserveLatency("inference", clock_->NowUs() - started);
         if (!result) {
             if (result.error().category == ErrorCategory::kCancelled) {

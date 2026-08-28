@@ -4,6 +4,10 @@
 加入并实机验证真实 V4L2 摄像头和 ALSA 麦克风后端；RKNN YOLOv5 推理后端已经实现为可选
 模块，编码与输出仍保留 Checksum 实现。硬件替换不修改公共数据契约和 Application 主流程。
 
+使用 AI/Codex 继续开发前必须先阅读根目录 [AGENTS.md](AGENTS.md)。该文件定义项目范围、
+工作区保护、开发板操作边界、Git 规则、验收证据和固定后续顺序；动态进度仍以 `docs/19` 和
+最新编号交接文档为准。
+
 ## 当前完成度
 
 - M0 工程基线：CMake targets、presets、严格编译告警、格式和静态检查配置。
@@ -11,8 +15,8 @@
 - M2 Mock 数据：RGB 测试图、连续正弦波、可配置视频失败、XRUN 和设备失联。
 - M3 多线程管道：Mock 推理、Checksum Encoder、PacketRouter、Null/JSONL Sink。
 - M4 工程能力：强类型配置、结构化日志、指标、工作线程健康检查和故障退出。
-- M6 推理接入：RKNN 1.4.0 生命周期、RGB/BGR 缩放、YOLOv5 后处理和来源坐标映射。
-- 自动测试：37 项单元与集成测试，覆盖正常、慢推理、限速、故障场景和硬件配置契约。
+- M6 推理接入：RKNN 1.4.0 生命周期、MJPEG 解码、RGB/BGR 缩放、YOLOv5 后处理和来源坐标映射。
+- 自动测试：43 项单元与集成测试，覆盖正常、慢推理、限速、坏 JPEG 恢复、故障场景和硬件配置契约。
 
 ARM64 静态 Mock 已在 RK3568 Buildroot 完成 33 项当前 PC 回归基线、板端 30 项旧基线、
 信号退出、30 分钟和 2 小时长稳。绿联 2K 摄像头已完成 UVC/UAC 枚举、720p MJPEG 样本、
@@ -22,15 +26,28 @@ ARM64 静态 Mock 已在 RK3568 Buildroot 完成 33 项当前 PC 回归基线、
 视频；30 分钟采集 90,000 个音频块和 52,340 帧视频，RSS 稳定为 9,728 KiB，错误、恢复和
 队列丢弃均为 0，SIGINT/SIGTERM 也能排空队列并正常退出。独立 RKNN 1.4.0 MobileNet 和
 YOLOv5s 已在板端完成真实 NPU 推理，YOLOv5 已验证固定图、摄像头单帧及连续 10 次基线。
-主程序 RKNN 后端代码已经加入，但真实摄像头输出仍是 MJPEG，尚需接入解码预处理后才能完成
-实时联调。RGA、MPP 和实际 RTSP/MP4 输出也未接入，当前 Checksum packet 不是 H.264/AAC
-成品。
+主程序 Mock RGB + RKNN 已在板端完成 10 秒验证，51 次请求与结果全部完成，NPU 中断增加
+51 次且无新增相关内核错误。主程序的 libjpeg-turbo MJPEG 解码预处理也已实现，并通过真实
+1280x720 摄像头 JPEG 的 Windows Debug/Release 回归。板端真实 MJPEG + RKNN 10 秒链路也已
+通过：269 帧视频、49 次解码/推理/NPU 中断、零错误、零队列丢弃和零新增相关内核错误。
+随后 60 秒稳定性测试也通过：61.17 秒采集 1,660 帧（27.14 FPS），291 次解码、推理结果
+和 NPU 中断完全对应，峰值温度 51.875 摄氏度，仍为零错误、零恢复和零队列丢弃。
+真实 ALSA 麦克风加入后，首次联合测试发现 PCM 在 RKNN 初始化前过早启动，约 80 ms 的
+缓冲区在读取线程启动前溢出。现已把 ALSA `START` 推迟到第一次 `Read()`；修复版三硬件
+10 秒测试得到 276 帧视频、500 个音频块和 49 次解码/推理/NPU 中断，错误、恢复、线程错误、
+队列丢弃和新增相关内核错误均为 0。30 分钟三硬件联合长稳也已收口：50,237 帧视频、89,983
+个音频块、8,714 次推理结果和 NPU 中断全部守恒，RSS 工作态稳定为 57,652 KiB、线程数稳定为
+9、峰值温度 57.222 摄氏度，错误、恢复、线程错误、队列丢弃和停止后残留均为 0。原控制器把
+有上限的解码延迟滑动窗口样本数误当成累计解码次数，因而写出 `failed:1`；项目保留该原始记录，
+并在五份原始证据 SHA-256 校验通过后按修正规则完成重验收。
+RGA、MPP 和实际 RTSP/MP4 输出仍未接入，当前 Checksum packet 不是 H.264/AAC 成品。
 
 ## 数据流
 
 ```text
 Mock/V4L2VideoCapture -> video queue -> ChecksumVideoEncoder -------+
-                      -> inference queue -> Mock/RKNN Inference     |
+                      -> inference queue -> optional MJPEG Decoder  |
+                                         -> Mock/RKNN Inference     |
                                                                +-> PacketRouter -> sinks
 Mock/AlsaAudioCapture  -> audio queue -> ChecksumAudioEncoder    +
 ```
@@ -50,8 +67,8 @@ powershell -ExecutionPolicy Bypass -File .\tools\build_windows.ps1
 ```
 
 脚本会依次配置、编译、运行全部测试并校验默认配置。要求命令行可找到 CMake 3.20+、
-Ninja、支持 C++20 的 GCC/Clang/MSVC，以及 Git。首次构建会下载锁定版本的
-nlohmann/json 和 GoogleTest。
+Ninja、支持 C++20 的 GCC/Clang/MSVC，以及 Git。首次构建会下载并校验锁定版本的
+libjpeg-turbo，同时下载锁定版本的 nlohmann/json 和 GoogleTest。
 
 ### Ubuntu / RK3568 Debian 系统
 
@@ -114,7 +131,12 @@ RK3568 M5 板端基线、Sanitizer、SIGTERM、长稳和 systemd 的完整验收
 YOLOv5s 转换、真实摄像头单帧检测、连续推理基线和主程序后端接入状态见
 [RKNN YOLOv5 主程序后端接入](docs/17-RKNN-YOLOv5主程序后端接入.md)。
 
-本轮完整实现清单、精确停止位置和下一次会话可直接执行的命令见
+主程序 MJPEG 解码实现、PC 侧证据和下一次板端验收边界见
+[MJPEG 解码预处理接入与验收](docs/22-MJPEG解码预处理接入与验收.md)。
+
+本轮完整实现清单、30 分钟证据、验收规则修正和固定后续顺序见
+[真实三硬件联合验收与 ALSA 启动修复总结](docs/23-真实三硬件联合验收与ALSA启动修复总结.md)。
+较早的 RKNN 接入过程见
 [本次会话实现总结与下一步](docs/18-本次会话实现总结与下一步.md)。
 
 ## 目录说明
@@ -124,7 +146,7 @@ YOLOv5s 转换、真实摄像头单帧检测、连续推理基线和主程序后
 | `include/rkav/common` | 公共错误、内存、时间和数据契约 |
 | `include/rkav/capture` | 视频/音频采集接口及 Mock 声明 |
 | `include/rkav/vision` | 推理接口和图像坐标变换 |
-| `include/rkav/media` | 编码接口和 Checksum 测试编码器 |
+| `include/rkav/media` | 视频解码、编码接口和 Checksum 测试编码器 |
 | `include/rkav/output` | PacketRouter 和输出端接口 |
 | `src` | 对应模块实现 |
 | `app/main.cpp` | 参数、信号和 Application 生命周期入口 |

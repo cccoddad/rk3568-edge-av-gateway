@@ -43,14 +43,25 @@ rkav_gid=$(id -g)
     --tag "$rkav_image" \
     "$rkav_project_root/tools/docker"
 
-"$rkav_container_engine" run --rm \
+set -- "$rkav_container_engine" run --rm \
     --user "$rkav_uid:$rkav_gid" \
     --env HOME=/tmp/rkav-home \
     --env RKNN_SDK_ROOT=/opt/rknn-sdk \
     --env RKAV_RKNN_BUILD_DIR=/workspace/build/cross-aarch64-rknn-ubuntu22.04 \
     --env "RKAV_BUILD_JOBS=${RKAV_BUILD_JOBS:-4}" \
     --volume "$rkav_project_root:/workspace" \
-    --volume "$RKNN_SDK_ROOT:/opt/rknn-sdk:ro" \
+    --volume "$RKNN_SDK_ROOT:/opt/rknn-sdk:ro"
+if [ -n "${RKAV_LIBJPEG_TURBO_SOURCE_DIR:-}" ]; then
+    if [ ! -f "$RKAV_LIBJPEG_TURBO_SOURCE_DIR/CMakeLists.txt" ]; then
+        echo "libjpeg-turbo source is incomplete: $RKAV_LIBJPEG_TURBO_SOURCE_DIR" >&2
+        exit 2
+    fi
+    set -- "$@" \
+        --env RKAV_LIBJPEG_TURBO_SOURCE_DIR=/opt/libjpeg-turbo \
+        --volume "$RKAV_LIBJPEG_TURBO_SOURCE_DIR:/opt/libjpeg-turbo:ro"
+fi
+set -- "$@" \
     --workdir /workspace \
     "$rkav_image" \
     sh ./tools/build_rknn_gateway.sh
+"$@"

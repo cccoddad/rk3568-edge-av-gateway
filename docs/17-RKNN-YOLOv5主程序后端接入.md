@@ -6,9 +6,9 @@
 同一套模型契约和 C17 后处理迁入主程序，新增可选 `RknnInferenceEngine`，默认 Mock 构建不
 依赖厂商 SDK。
 
-当前代码完成了 RGB/BGR 到模型输入、NPU 推理和检测框回映射，但真实 UGREEN 摄像头协商
-格式是 MJPEG。MJPEG 解码层尚未接入主程序，因此本阶段不能表述为“实时摄像头目标检测已经
-完成”。
+后续已经完成主程序 Mock RGB + RKNN 板端 10 秒验证，并接入 MJPEG 到 RGB888 解码层。
+真实 UGREEN 摄像头协商格式为 MJPEG；解码代码已通过其 1280x720 样本回归，但实时摄像头
+与 RKNN 整链路仍须在板端验收后才能表述为完成。
 
 ## 2. 板端基线
 
@@ -39,6 +39,8 @@
 - RKNN 输出通过 RAII 保证在所有错误路径释放，`Close` 可重复调用。
 - Application 在推理队列前按 `max_fps` 抽帧；生产配置固定为 5 FPS、容量 1、
   `keep_latest`。
+- 可选 `JpegVideoDecoder` 使用固定版本 libjpeg-turbo，在抽帧后把 CPU MJPEG 转为 RGB888，
+  保持来源 sequence、PTS 和 JPEG 头中的实际尺寸。
 
 ## 4. 构建
 
@@ -56,22 +58,23 @@ Ubuntu 24.04 的 AArch64 C++ 运行库，因为它会引入板端不存在的 `G
 GLIBC 2.35 的符号需求，并生成
 `out/aarch64-rknn-gateway/SHA256SUMS`。
 
-`config/rk3568-rknn-rgb.json` 当前使用 Mock RGB 视频验证主程序 RKNN 生命周期，模型路径指向
+`config/rk3568-rknn-rgb.json` 使用 Mock RGB 验证主程序 RKNN 生命周期；
+`config/rk3568-rknn-mjpeg.json` 使用 `/dev/video9` 的 1280x720 MJPEG。两者模型路径都指向
 已经持久化的 `/userdata/rkav/yolov5-runtime-712d661/yolov5s-rk3568.rknn`。
 
 ## 5. 验证状态
 
-- Windows 默认 Mock 构建：37 项测试通过。
+- Windows Debug/Release：43 项测试通过，另显式通过真实 1280x720 摄像头 JPEG 样本测试。
 - 5 FPS Application 抽帧策略：集成测试通过。
 - 精确 RKNN 1.4.0 头文件：严格警告语法编译通过。
 - C17 YOLOv5 后处理：主机测试通过。
 - AArch64 RKNN 主程序动态构建：CI 使用 GCC/G++ 11.4.0 构建通过，最高要求 GLIBC 2.34。
-- 板端 Mock RGB + RKNN 10 秒运行：等待动态构建产物。
-- 真实 MJPEG 摄像头 + RKNN：等待 MJPEG 解码预处理层。
+- 板端 Mock RGB + RKNN 10 秒运行：通过；51/51 次推理完成，NPU 中断增加 51，无新增相关内核错误。
+- 真实 MJPEG 摄像头 + RKNN：解码代码已完成，等待新产物交叉构建和板端实时验证。
 
 ## 6. 下一步
 
-1. 在 Ubuntu 执行 `build_rknn_gateway_container.sh` 生成可部署产物。
-2. 通过 TF 卡把主程序和配置部署到板端，先运行 Mock RGB + RKNN 10 秒。
-3. 新增独立 MJPEG 解码预处理接口，把 `/dev/video9` 帧转换为 CPU RGB888。
-4. 完成真实摄像头、ALSA 麦克风和 RKNN 的 10 秒、60 秒及长稳验证。
+1. 在 Ubuntu 交叉构建包含静态 libjpeg-turbo 的新主程序，并复核 GLIBC 2.35 上限。
+2. 通过 TF 卡部署新主程序和 `rk3568-rknn-mjpeg.json`。
+3. 完成真实摄像头 + Mock 音频 + RKNN 的 10 秒和 60 秒验证。
+4. 再替换为真实 ALSA 麦克风，执行 30 分钟长稳验证。

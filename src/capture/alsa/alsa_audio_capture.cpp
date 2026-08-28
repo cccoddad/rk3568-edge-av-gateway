@@ -249,16 +249,12 @@ Result<AudioCapabilities> AlsaAudioCapture::Open(const AudioConfig& config) {
     if (IoctlRetry(file_descriptor_, SNDRV_PCM_IOCTL_PREPARE, nullptr) < 0) {
         return fail_and_close(ReadError("prepare", errno));
     }
-    // 直接使用内核 UAPI 时没有 alsa-lib 帮助自动触发 Capture，必须显式开始数据流。
-    if (IoctlRetry(file_descriptor_, SNDRV_PCM_IOCTL_START, nullptr) < 0) {
-        return fail_and_close(ReadError("start", errno));
-    }
-
     config_ = config;
     capabilities_ =
         AudioCapabilities{sample_rate, channels, samples_per_frame, SampleFormat::kS16LE};
     sequence_ = 0;
-    next_pts_us_ = clock_->NowUs();
+    next_pts_us_ = 0;
+    started_ = false;
     open_ = true;
     return Result<AudioCapabilities>::Success(capabilities_);
 }
@@ -276,6 +272,15 @@ Result<AudioFrame> AlsaAudioCapture::Read(std::stop_token stop) {
         }
         return Result<AudioFrame>::Failure(
             AlsaError(ErrorCategory::kInvalidState, "read", "capture device is not open"));
+    }
+    if (!started_) {
+        // Open 之后仍可能加载 RKNN 等较慢后端。若在 Open 中提前 START，有限的 ALSA 环形
+        // 缓冲会在线程真正开始 Read 前溢出。把硬件启动和首个 PTS 都推迟到第一次读取。
+        if (IoctlRetry(file_descriptor_, SNDRV_PCM_IOCTL_START, nullptr) < 0) {
+            return Result<AudioFrame>::Failure(ReadError("start", errno));
+        }
+        started_ = true;
+        next_pts_us_ = clock_->NowUs();
     }
     const std::size_t frames = static_cast<std::size_t>(capabilities_.samples_per_frame);
     const std::size_t channels = static_cast<std::size_t>(capabilities_.channels);
@@ -383,12 +388,14 @@ Result<void> AlsaAudioCapture::Recover() {
         return Result<void>::Failure(
             AlsaError(ErrorCategory::kInvalidState, "recover", "capture device is not open"));
     }
+    started_ = false;
     if (IoctlRetry(file_descriptor_, SNDRV_PCM_IOCTL_PREPARE, nullptr) < 0) {
         return Result<void>::Failure(ReadError("recover", errno));
     }
     if (IoctlRetry(file_descriptor_, SNDRV_PCM_IOCTL_START, nullptr) < 0) {
         return Result<void>::Failure(ReadError("restart", errno));
     }
+    started_ = true;
     return Result<void>::Success();
 }
 
@@ -405,6 +412,7 @@ void AlsaAudioCapture::CloseUnlocked() noexcept {
     file_descriptor_ = -1;
     sequence_ = 0;
     next_pts_us_ = 0;
+    started_ = false;
     open_ = false;
 }
 

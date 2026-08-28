@@ -22,20 +22,34 @@ for rkav_command in cmake ninja aarch64-linux-gnu-g++ file readelf; do
     fi
 done
 
-cmake -S "$rkav_project_root" -B "$rkav_build_dir" -G Ninja \
+set -- cmake -S "$rkav_project_root" -B "$rkav_build_dir" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_TOOLCHAIN_FILE="$rkav_project_root/cmake/Toolchains/aarch64-linux-gnu-dynamic.cmake" \
     -DRKAV_BUILD_TESTS=OFF \
     -DRKAV_ENABLE_MOCK=ON \
     -DRKAV_WITH_V4L2=ON \
     -DRKAV_WITH_ALSA=ON \
+    -DRKAV_WITH_JPEG=ON \
     -DRKAV_WITH_RKNN=ON \
     -DRKNN_SDK_ROOT="$RKNN_SDK_ROOT"
+if [ -n "${RKAV_LIBJPEG_TURBO_SOURCE_DIR:-}" ]; then
+    if [ ! -f "$RKAV_LIBJPEG_TURBO_SOURCE_DIR/CMakeLists.txt" ]; then
+        echo "libjpeg-turbo source is incomplete: $RKAV_LIBJPEG_TURBO_SOURCE_DIR" >&2
+        exit 2
+    fi
+    set -- "$@" \
+        "-DFETCHCONTENT_SOURCE_DIR_LIBJPEG_TURBO=$RKAV_LIBJPEG_TURBO_SOURCE_DIR"
+fi
+"$@"
 cmake --build "$rkav_build_dir" -j "${RKAV_BUILD_JOBS:-4}"
 
 mkdir -p "$rkav_output_dir"
 cp "$rkav_build_dir/rkav-gateway" "$rkav_output_dir/rkav-gateway"
 cp "$rkav_project_root/config/rk3568-rknn-rgb.json" "$rkav_output_dir/rk3568-rknn-rgb.json"
+cp "$rkav_project_root/config/rk3568-rknn-mjpeg.json" \
+    "$rkav_output_dir/rk3568-rknn-mjpeg.json"
+cp "$rkav_project_root/config/rk3568-rknn-mjpeg-alsa.json" \
+    "$rkav_output_dir/rk3568-rknn-mjpeg-alsa.json"
 
 file "$rkav_output_dir/rkav-gateway"
 readelf -d "$rkav_output_dir/rkav-gateway" | grep 'Shared library'
@@ -71,7 +85,12 @@ done
 
 (
     cd "$rkav_output_dir"
-    sha256sum rkav-gateway rk3568-rknn-rgb.json > SHA256SUMS
+    sha256sum \
+        rkav-gateway \
+        rk3568-rknn-rgb.json \
+        rk3568-rknn-mjpeg.json \
+        rk3568-rknn-mjpeg-alsa.json \
+        > SHA256SUMS
     sha256sum --check SHA256SUMS
 )
 

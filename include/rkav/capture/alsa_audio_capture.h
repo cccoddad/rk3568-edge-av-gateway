@@ -30,6 +30,7 @@ class AlsaAudioCapture final : public IAudioCapture {
     int file_descriptor_{-1};
     std::uint64_t sequence_{0};
     TimestampUs next_pts_us_{0};
+    bool started_{false};
     bool open_{false};
 };
 

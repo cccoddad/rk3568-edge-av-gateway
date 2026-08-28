@@ -12,6 +12,60 @@ include(cmake/Options.cmake)
 include(FetchContent)
 find_package(Threads REQUIRED)
 
+# 固定官方 libjpeg-turbo 源码并按上游要求使用 ExternalProject 独立构建静态库，避免依赖
+# 板端未知版本的 libjpeg 动态库，也避免第三方全局 CMake 变量污染主工程。
+if(RKAV_WITH_JPEG)
+    include(ExternalProject)
+    set(RKAV_LIBJPEG_PREFIX "${CMAKE_BINARY_DIR}/_deps/libjpeg-turbo")
+    set(RKAV_LIBJPEG_SOURCE_DIR "${RKAV_LIBJPEG_PREFIX}/src/libjpeg-turbo")
+    set(RKAV_LIBJPEG_BINARY_DIR "${RKAV_LIBJPEG_PREFIX}/build")
+    set(RKAV_LIBJPEG_CMAKE_ARGS
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        -DENABLE_SHARED=OFF
+        -DENABLE_STATIC=ON
+        -DWITH_SIMD=OFF
+        -DWITH_TURBOJPEG=ON
+        -DWITH_TOOLS=OFF
+        -DWITH_TESTS=OFF
+    )
+    if(CMAKE_TOOLCHAIN_FILE)
+        list(APPEND RKAV_LIBJPEG_CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE})
+    endif()
+
+    set(RKAV_LIBJPEG_DOWNLOAD_ARGS
+        URL https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.4.1/libjpeg-turbo-3.1.4.1.tar.gz
+        URL_HASH SHA256=ecae8008e2cc9ade2f2c1bb9d5e6d4fb73e7c433866a056bd82980741571a022
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    )
+    if(FETCHCONTENT_SOURCE_DIR_LIBJPEG_TURBO)
+        set(RKAV_LIBJPEG_SOURCE_DIR "${FETCHCONTENT_SOURCE_DIR_LIBJPEG_TURBO}")
+        set(RKAV_LIBJPEG_DOWNLOAD_ARGS DOWNLOAD_COMMAND "")
+    endif()
+
+    set(RKAV_TURBOJPEG_LIBRARY
+        "${RKAV_LIBJPEG_BINARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}turbojpeg${CMAKE_STATIC_LIBRARY_SUFFIX}"
+    )
+    ExternalProject_Add(rkav_libjpeg_turbo_external
+        ${RKAV_LIBJPEG_DOWNLOAD_ARGS}
+        PREFIX "${RKAV_LIBJPEG_PREFIX}"
+        SOURCE_DIR "${RKAV_LIBJPEG_SOURCE_DIR}"
+        BINARY_DIR "${RKAV_LIBJPEG_BINARY_DIR}"
+        CMAKE_ARGS ${RKAV_LIBJPEG_CMAKE_ARGS}
+        BUILD_COMMAND
+            "${CMAKE_COMMAND}" --build <BINARY_DIR> --config ${CMAKE_BUILD_TYPE}
+            --target turbojpeg-static
+        INSTALL_COMMAND ""
+        BUILD_BYPRODUCTS "${RKAV_TURBOJPEG_LIBRARY}"
+    )
+    add_library(rkav_turbojpeg STATIC IMPORTED GLOBAL)
+    set_target_properties(rkav_turbojpeg PROPERTIES
+        IMPORTED_LOCATION "${RKAV_TURBOJPEG_LIBRARY}"
+    )
+    add_dependencies(rkav_turbojpeg rkav_libjpeg_turbo_external)
+endif()
+
 find_package(nlohmann_json 3.11.3 CONFIG QUIET)
 if(NOT nlohmann_json_FOUND)
     FetchContent_Declare(
@@ -47,6 +101,7 @@ target_compile_definitions(rkav_core PUBLIC
     RKAV_ENABLE_MOCK=$<BOOL:${RKAV_ENABLE_MOCK}>
     RKAV_WITH_V4L2=$<BOOL:${RKAV_WITH_V4L2}>
     RKAV_WITH_ALSA=$<BOOL:${RKAV_WITH_ALSA}>
+    RKAV_WITH_JPEG=$<BOOL:${RKAV_WITH_JPEG}>
     RKAV_WITH_RKNN=$<BOOL:${RKAV_WITH_RKNN}>
     RKAV_WITH_RGA=$<BOOL:${RKAV_WITH_RGA}>
     RKAV_WITH_MPP=$<BOOL:${RKAV_WITH_MPP}>
@@ -64,6 +119,21 @@ if(RKAV_ENABLE_MOCK)
     target_link_libraries(rkav_mock
         PUBLIC rkav_core rkav_project_options
         PRIVATE rkav_project_warnings
+    )
+endif()
+
+# JPEG 解码只依赖平台无关 TurboJPEG API，真实 MJPEG 仅在推理抽帧后解码为 RGB888。
+if(RKAV_WITH_JPEG)
+    add_library(rkav_jpeg
+        src/media/jpeg/jpeg_video_decoder.cpp
+    )
+    target_include_directories(rkav_jpeg
+        PUBLIC include
+        PRIVATE "${RKAV_LIBJPEG_SOURCE_DIR}/src" "${RKAV_LIBJPEG_BINARY_DIR}"
+    )
+    target_link_libraries(rkav_jpeg
+        PUBLIC rkav_core rkav_project_options
+        PRIVATE rkav_turbojpeg rkav_project_warnings
     )
 endif()
 
@@ -157,6 +227,9 @@ endif()
 if(RKAV_WITH_ALSA)
     target_link_libraries(rkav_app PUBLIC rkav_alsa)
 endif()
+if(RKAV_WITH_JPEG)
+    target_link_libraries(rkav_app PUBLIC rkav_jpeg)
+endif()
 if(RKAV_WITH_RKNN)
     target_link_libraries(rkav_app PUBLIC rkav_rknn)
 endif()
@@ -177,6 +250,13 @@ if(RKAV_WITH_V4L2)
 endif()
 if(RKAV_WITH_RKNN)
     install(FILES config/rk3568-rknn-rgb.json DESTINATION etc/rkav)
+    if(RKAV_WITH_JPEG)
+        install(FILES
+            config/rk3568-rknn-mjpeg.json
+            config/rk3568-rknn-mjpeg-alsa.json
+            DESTINATION etc/rkav
+        )
+    endif()
 endif()
 
 # 测试依赖只在显式启用时下载和编译，不影响最终板端最小构建。

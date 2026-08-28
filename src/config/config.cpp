@@ -520,6 +520,14 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
         if (config.inference.mode != "yolov5") {
             return fail("inference.mode", "RKNN backend currently supports yolov5 only");
         }
+        if (config.video.format == PixelFormat::kMjpeg) {
+#if !RKAV_WITH_JPEG
+            return fail("video.format", "MJPEG with RKNN requires the JPEG decoder feature");
+#endif
+        } else if (config.video.format != PixelFormat::kRgb888 &&
+                   config.video.format != PixelFormat::kBgr888) {
+            return fail("video.format", "RKNN currently requires RGB/BGR or decodable MJPEG");
+        }
 #else
         return fail("inference.backend", "RKNN inference backend is not compiled in");
 #endif

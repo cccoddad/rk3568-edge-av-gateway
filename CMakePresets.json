@@ -15,6 +15,7 @@
         "RKAV_ENABLE_MOCK": "ON",
         "RKAV_WITH_V4L2": "OFF",
         "RKAV_WITH_ALSA": "OFF",
+        "RKAV_WITH_JPEG": "ON",
         "RKAV_WITH_RKNN": "OFF",
         "RKAV_WITH_RGA": "OFF",
         "RKAV_WITH_MPP": "OFF"

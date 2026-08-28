@@ -16,6 +16,7 @@
 #include "rkav/common/clock.h"
 #include "rkav/config/config.h"
 #include "rkav/media/audio_encoder.h"
+#include "rkav/media/video_decoder.h"
 #include "rkav/media/video_encoder.h"
 #include "rkav/monitor/metrics.h"
 #include "rkav/output/packet_router.h"
@@ -92,6 +93,7 @@ class Application {
     std::unique_ptr<IVideoCapture> video_capture_;  // 视频采集后端唯一所有者。
     std::unique_ptr<IAudioCapture> audio_capture_;  // 音频采集后端唯一所有者。
     std::unique_ptr<IInferenceEngine> inference_;   // 推理后端唯一所有者。
+    std::unique_ptr<IVideoDecoder> video_decoder_;  // 可选压缩帧解码器唯一所有者。
     std::unique_ptr<IVideoEncoder> video_encoder_;  // 视频编码器唯一所有者。
     std::unique_ptr<IAudioEncoder> audio_encoder_;  // 音频编码器唯一所有者。
     std::unique_ptr<PacketRouter> router_;          // 编码包输出路由器。

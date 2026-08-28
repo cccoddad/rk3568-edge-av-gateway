@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "runtime": {
+    "mode": "hardware",
+    "log_level": "info",
+    "shutdown_timeout_ms": 5000,
+    "run_duration_seconds": 10
+  },
+  "video": {
+    "backend": "v4l2",
+    "device": "/dev/video9",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "format": "MJPEG",
+    "capture_timeout_ms": 1000,
+    "mmap_buffer_count": 4,
+    "queue_capacity": 4,
+    "overflow_policy": "drop_oldest"
+  },
+  "audio": {
+    "backend": "alsa",
+    "device": "hw:2,0",
+    "sample_rate": 48000,
+    "channels": 2,
+    "format": "S16_LE",
+    "frame_duration_ms": 20,
+    "capture_timeout_ms": 1000,
+    "queue_capacity_ms": 300,
+    "realtime": true
+  },
+  "inference": {
+    "backend": "rknn",
+    "mode": "yolov5",
+    "model_path": "/userdata/rkav/yolov5-runtime-712d661/yolov5s-rk3568.rknn",
+    "input_width": 640,
+    "input_height": 640,
+    "latency_ms": 0,
+    "max_fps": 5,
+    "object_threshold": 0.25,
+    "nms_threshold": 0.45,
+    "max_detections": 100,
+    "queue_capacity": 1,
+    "overflow_policy": "keep_latest",
+    "max_result_age_ms": 400
+  },
+  "video_encoder": {
+    "backend": "checksum",
+    "mock_keyframe_interval": 30
+  },
+  "audio_encoder": {
+    "backend": "checksum"
+  },
+  "outputs": [
+    {
+      "type": "null",
+      "enabled": true,
+      "required": true,
+      "validate_timestamps": true,
+      "queue_capacity": 16,
+      "overflow_policy": "drop_oldest",
+      "write_delay_ms": 0,
+      "fail_after_packets": null
+    }
+  ],
+  "monitoring": {
+    "metrics_interval_ms": 1000,
+    "health_interval_ms": 500,
+    "worker_stall_timeout_ms": 3000
+  }
+}

@@ -1,0 +1,13 @@
+---
+description: Always load the RK3568 gateway project workflow, safety boundaries, and current handoff
+alwaysApply: true
+---
+
+# RKAV Project Entry Rule
+
+- Read `/AGENTS.md` completely before inspecting, editing, building, testing, or operating hardware.
+- Treat `AGENTS.md` as the canonical collaboration and safety rule; do not duplicate or override it here.
+- Read `docs/01-项目总体代码架构.md` for scope and fixed implementation order.
+- Read `docs/19-项目当前开发状态.md` and the latest numbered handoff document for dynamic status.
+- Preserve the dirty worktree and inspect existing changes before acting.
+- This repository is only the RK3568 audio/video edge gateway; do not mix in external Qt projects.
