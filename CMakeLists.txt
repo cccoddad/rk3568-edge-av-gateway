@@ -102,6 +102,7 @@ target_compile_definitions(rkav_core PUBLIC
     RKAV_WITH_V4L2=$<BOOL:${RKAV_WITH_V4L2}>
     RKAV_WITH_ALSA=$<BOOL:${RKAV_WITH_ALSA}>
     RKAV_WITH_JPEG=$<BOOL:${RKAV_WITH_JPEG}>
+    RKAV_WITH_FFMPEG=$<BOOL:${RKAV_WITH_FFMPEG}>
     RKAV_WITH_RKNN=$<BOOL:${RKAV_WITH_RKNN}>
     RKAV_WITH_RGA=$<BOOL:${RKAV_WITH_RGA}>
     RKAV_WITH_MPP=$<BOOL:${RKAV_WITH_MPP}>
@@ -120,6 +121,32 @@ if(RKAV_ENABLE_MOCK)
         PUBLIC rkav_core rkav_project_options
         PRIVATE rkav_project_warnings
     )
+endif()
+
+# FFmpeg 软件媒体基线依赖发行版提供的开发包；编码器是否含 libx264/libopenh264 在 Open 时验证。
+if(RKAV_WITH_FFMPEG)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(RKAV_FFMPEG REQUIRED IMPORTED_TARGET
+        libavcodec>=58
+        libavformat>=58
+        libavutil>=56
+        libswscale>=5
+        libswresample>=3
+    )
+    add_library(rkav_ffmpeg
+        src/media/ffmpeg/ffmpeg_encoder.cpp
+        src/output/ffmpeg/ffmpeg_mp4_sink.cpp
+    )
+    target_include_directories(rkav_ffmpeg PUBLIC include)
+    target_link_libraries(rkav_ffmpeg
+        PUBLIC rkav_core rkav_project_options
+        PRIVATE PkgConfig::RKAV_FFMPEG rkav_project_warnings
+    )
+    # Ubuntu 22.04 FFmpeg 4.4 的 channel_layout 字段在新版本被标为 deprecated；该后端
+    # 有意使用旧 ABI 以匹配板端 glibc 2.35 构建基线，其他项目告警仍保持 -Werror。
+    if(NOT MSVC)
+        target_compile_options(rkav_ffmpeg PRIVATE -Wno-deprecated-declarations)
+    endif()
 endif()
 
 # JPEG 解码只依赖平台无关 TurboJPEG API，真实 MJPEG 仅在推理抽帧后解码为 RGB888。
@@ -230,6 +257,9 @@ endif()
 if(RKAV_WITH_JPEG)
     target_link_libraries(rkav_app PUBLIC rkav_jpeg)
 endif()
+if(RKAV_WITH_FFMPEG)
+    target_link_libraries(rkav_app PUBLIC rkav_ffmpeg)
+endif()
 if(RKAV_WITH_RKNN)
     target_link_libraries(rkav_app PUBLIC rkav_rknn)
 endif()
@@ -263,7 +293,11 @@ endif()
 if(RKAV_BUILD_TESTS)
     enable_testing()
     set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-    find_package(GTest 1.15.2 CONFIG QUIET)
+    # Ubuntu 22.04/24.04 分别提供较旧但满足当前基础断言 API 的 GTest；优先复用系统包，
+    # 系统没有可用版本时仍回退到下方固定提交，避免无谓访问 GitHub。
+    if(NOT WIN32)
+        find_package(GTest 1.11 CONFIG QUIET)
+    endif()
     if(NOT GTest_FOUND)
         FetchContent_Declare(
             googletest

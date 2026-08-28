@@ -94,9 +94,11 @@ class Application {
     std::unique_ptr<IAudioCapture> audio_capture_;  // 音频采集后端唯一所有者。
     std::unique_ptr<IInferenceEngine> inference_;   // 推理后端唯一所有者。
     std::unique_ptr<IVideoDecoder> video_decoder_;  // 可选压缩帧解码器唯一所有者。
+    std::unique_ptr<IVideoDecoder> video_encode_decoder_;  // 软件编码支路独占解码器。
     std::unique_ptr<IVideoEncoder> video_encoder_;  // 视频编码器唯一所有者。
     std::unique_ptr<IAudioEncoder> audio_encoder_;  // 音频编码器唯一所有者。
     std::unique_ptr<PacketRouter> router_;          // 编码包输出路由器。
+    std::vector<EncodedStreamInfo> encoded_streams_;  // Sink 建流所需的音视频描述。
 
     std::unique_ptr<BoundedQueue<VideoFrame>> inference_queue_;     // 等待推理的视频帧。
     std::unique_ptr<BoundedQueue<VideoFrame>> video_encode_queue_;  // 等待编码的视频帧。

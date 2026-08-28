@@ -7,6 +7,7 @@
 #include "rkav/common/result.h"
 #include "rkav/common/types.h"
 #include "rkav/config/config.h"
+#include "rkav/capture/video_capture.h"
 
 namespace rkav {
 
@@ -15,7 +16,8 @@ class IVideoEncoder {
     /// 功能：通过接口指针销毁具体编码器，确保派生类资源被正确释放。
     virtual ~IVideoEncoder() = default;
     /// 用配置初始化编码器；成功后才能调用 Encode。
-    virtual Result<void> Open(const VideoEncoderConfig& config) = 0;
+    virtual Result<EncodedStreamInfo> Open(const VideoEncoderConfig& config,
+                                           const VideoCapabilities& input) = 0;
     /// 编码一个视频帧；真实硬件编码器可能返回零个或多个包。
     virtual Result<std::vector<EncodedPacket>> Encode(const VideoFrame& frame) = 0;
     // Flush 只输出一次内部延迟包；Flush 之后再次 Encode 必须返回错误。

@@ -84,14 +84,20 @@ struct InferenceConfig {
 struct VideoEncoderConfig {
     std::string backend{"checksum"};  // 视频编码后端名称。
     int mock_keyframe_interval{30};   // 每隔多少视频帧标记一个关键帧。
+    std::string codec_name{"libx264"};  // FFmpeg encoder 名称，可替换为 libopenh264。
+    int bitrate_bps{3'000'000};         // H.264 目标码率。
+    int gop_size{30};                    // 相邻关键帧的最大帧数。
+    std::string preset{"veryfast"};     // 支持 preset 的编码器使用的速度/压缩率取舍。
 };
 
 struct AudioEncoderConfig {
     std::string backend{"checksum"};  // 音频编码后端名称。
+    std::string codec_name{"aac"};    // FFmpeg encoder 名称；aac 为原生 AAC-LC。
+    int bitrate_bps{128'000};          // AAC 目标码率。
 };
 
 struct OutputConfig {
-    std::string type{"null"};  // 输出类型：null 或 jsonl。
+    std::string type{"null"};  // 输出类型：null、jsonl 或 mp4。
     bool enabled{true};        // false 时完全跳过该输出。
     // 必需输出失败会停止整个应用；非必需输出失败时只隔离该输出。
     bool required{true};
@@ -99,6 +105,7 @@ struct OutputConfig {
     std::string path;                // JSONL 等文件输出路径。
     std::size_t queue_capacity{16};  // 此输出独立队列的包数量上限。
     OverflowPolicy overflow_policy{OverflowPolicy::kDropOldest};  // 满队列处理方式。
+    int push_timeout_ms{0};  // block_producer 最长等待时间；0 表示不等待。
     int write_delay_ms{0};  // 每包人工写入延迟，用于模拟慢输出。
     std::optional<std::uint64_t> fail_after_packets;  // 写入 N 包后注入故障。
 };

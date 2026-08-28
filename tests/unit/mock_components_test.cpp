@@ -62,7 +62,8 @@ TEST(MockVideoCaptureTest, GeneratesChangingFramesWithValidLayout) {
 // 第一块持续 20ms，下一块直接从 40ms 开始应被判定为缺失一块。
 TEST(ChecksumAudioEncoderTest, RejectsMissingAudioBlock) {
     ChecksumAudioEncoder encoder;
-    ASSERT_TRUE(encoder.Open(AudioEncoderConfig{}));
+    ASSERT_TRUE(encoder.Open(AudioEncoderConfig{}, AudioCapabilities{8'000, 1, 160,
+                                                                     SampleFormat::kS16LE}));
     auto samples = Buffer::Allocate(320U);
     AudioFrame first{0, 0, 8'000, 1, 160, SampleFormat::kS16LE, samples};
     AudioFrame discontinuous{1, 40'000, 8'000, 1, 160, SampleFormat::kS16LE, samples};
@@ -78,7 +79,8 @@ TEST(ChecksumVideoEncoderTest, MarksConfiguredKeyframes) {
     ChecksumVideoEncoder encoder;
     VideoEncoderConfig config;
     config.mock_keyframe_interval = 3;
-    ASSERT_TRUE(encoder.Open(config));
+    ASSERT_TRUE(encoder.Open(config,
+                             VideoCapabilities{16, 16, 30, PixelFormat::kRgb888}));
     VideoFrame frame{3, 1000, 16, 16, 48, PixelFormat::kRgb888, Buffer::Allocate(16U * 16U * 3U),
                      {}};
 

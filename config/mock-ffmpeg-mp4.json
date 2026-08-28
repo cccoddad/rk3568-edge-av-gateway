@@ -3,40 +3,31 @@
   "runtime": {
     "mode": "mock",
     "log_level": "info",
-    "shutdown_timeout_ms": 5000,
-    "run_duration_seconds": 10
+    "shutdown_timeout_ms": 10000,
+    "run_duration_seconds": 5
   },
   "video": {
     "backend": "mock",
-    "width": 640,
-    "height": 360,
+    "width": 320,
+    "height": 180,
     "fps": 30,
     "format": "RGB888",
     "queue_capacity": 4,
     "overflow_policy": "drop_oldest",
     "pattern": "moving_box",
-    "realtime": true,
-    "failure": {
-      "fail_after_frames": null,
-      "fail_for_frames": 0,
-      "read_delay_ms": 0
-    }
+    "realtime": true
   },
   "audio": {
     "backend": "mock",
     "sample_rate": 48000,
-    "channels": 1,
+    "channels": 2,
     "format": "S16_LE",
     "frame_duration_ms": 20,
     "queue_capacity_ms": 300,
     "signal": "sine",
     "frequency_hz": 1000.0,
     "amplitude": 0.25,
-    "realtime": true,
-    "failure": {
-      "xrun_every_blocks": null,
-      "disconnect_after_blocks": null
-    }
+    "realtime": true
   },
   "inference": {
     "backend": "mock",
@@ -49,35 +40,27 @@
     "max_result_age_ms": 200
   },
   "video_encoder": {
-    "backend": "checksum",
-    "mock_keyframe_interval": 30
+    "backend": "ffmpeg",
+    "codec_name": "libx264",
+    "bitrate_bps": 1000000,
+    "gop_size": 30,
+    "preset": "veryfast"
   },
   "audio_encoder": {
-    "backend": "checksum"
+    "backend": "ffmpeg",
+    "codec_name": "aac",
+    "bitrate_bps": 128000
   },
   "outputs": [
     {
-      "type": "null",
+      "type": "mp4",
       "enabled": true,
       "required": true,
       "validate_timestamps": true,
-      "queue_capacity": 16,
-      "overflow_policy": "drop_oldest",
-      "push_timeout_ms": 0,
-      "write_delay_ms": 0,
-      "fail_after_packets": null
-    },
-    {
-      "type": "jsonl",
-      "enabled": false,
-      "required": false,
-      "validate_timestamps": true,
-      "path": "out/packets.jsonl",
-      "queue_capacity": 16,
-      "overflow_policy": "drop_oldest",
-      "push_timeout_ms": 0,
-      "write_delay_ms": 0,
-      "fail_after_packets": null
+      "path": "out/software-baseline.mp4",
+      "queue_capacity": 256,
+      "overflow_policy": "block_producer",
+      "push_timeout_ms": 1000
     }
   ],
   "monitoring": {

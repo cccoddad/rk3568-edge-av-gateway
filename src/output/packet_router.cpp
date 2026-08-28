@@ -17,6 +17,7 @@ struct PacketRouter::SinkWorker {
     std::unique_ptr<BoundedQueue<std::shared_ptr<const EncodedPacket>>> queue;  // 包队列。
     std::jthread thread;  // 唯一调用该 Sink::Write 的消费线程。
     WorkerHealth health;  // 输出线程的进展和错误状态。
+    std::atomic_bool abort_requested{false};  // Abort 路径禁止写完整文件 trailer。
 };
 
 /// 功能：保存统一时钟和共享指标仓库；尚不创建线程。
@@ -27,13 +28,14 @@ PacketRouter::PacketRouter(std::shared_ptr<IClock> clock, MetricsRegistry& metri
 PacketRouter::~PacketRouter() { Stop(CloseMode::kAbort); }
 
 /// 功能：启动前打开一个 Sink 并为其创建独立有界队列。
-Result<void> PacketRouter::AddSink(const OutputConfig& config, std::unique_ptr<IPacketSink> sink) {
+Result<void> PacketRouter::AddSink(const OutputConfig& config, std::unique_ptr<IPacketSink> sink,
+                                   std::span<const EncodedStreamInfo> streams) {
     if (started_.load(std::memory_order_acquire)) {
         return Result<void>::Failure(Error{ErrorCategory::kInvalidState, 0, "packet_router",
                                            "add_sink", "router is already running", false});
     }
     // 先 Open 再纳入 workers_，失败的 Sink 不会留下半初始化 worker。
-    auto opened = sink->Open(config);  // Sink 资源打开结果。
+    auto opened = sink->Open(config, streams);  // Sink 资源打开结果。
     if (!opened) {
         return opened;
     }
@@ -81,6 +83,7 @@ Result<void> PacketRouter::Start() {
                                            DescribeError(result.error()),
                                            {{"sink", target->sink->name()}});
                     if (target->config.required) {
+                        target->abort_requested.store(true, std::memory_order_release);
                         {
                             std::scoped_lock lock(error_mutex_);
                             if (!fatal_error_.has_value()) {
@@ -98,11 +101,21 @@ Result<void> PacketRouter::Start() {
                 metrics_.Increment(MetricCounter::kPacketsConsumed);
                 target->health.MarkProgress(clock_->NowUs());
             }
-            auto flushed = target->sink->Flush();
-            if (!flushed) {
-                Logger::Instance().Log(LogLevel::kWarn, "packet_router", "sink_flush_failed",
-                                       DescribeError(flushed.error()),
-                                       {{"sink", target->sink->name()}});
+            if (!target->abort_requested.load(std::memory_order_acquire)) {
+                auto flushed = target->sink->Flush();
+                if (!flushed) {
+                    metrics_.Increment(MetricCounter::kErrors);
+                    Logger::Instance().Log(LogLevel::kWarn, "packet_router", "sink_flush_failed",
+                                           DescribeError(flushed.error()),
+                                           {{"sink", target->sink->name()}});
+                    if (target->config.required) {
+                        std::scoped_lock lock(error_mutex_);
+                        if (!fatal_error_.has_value()) {
+                            fatal_error_ = flushed.error();
+                        }
+                        fatal_.store(true, std::memory_order_release);
+                    }
+                }
             }
             target->sink->Close();
             if (target->health.state() != WorkerState::kDegraded) {
@@ -120,9 +133,24 @@ void PacketRouter::Submit(std::shared_ptr<const EncodedPacket> packet) {
     }
     for (auto& worker : workers_) {
         // 零等待投递保证编码线程不被慢 Sink 反向阻塞，丢包由队列指标体现。
-        const auto status = worker->queue->Push(packet, {}, std::chrono::milliseconds(0));
+        const auto status = worker->queue->Push(
+            packet, {}, std::chrono::milliseconds(worker->config.push_timeout_ms));
         if (status == QueueStatus::kOk) {
             metrics_.Increment(MetricCounter::kPacketsRouted);
+        } else if (worker->config.required && status != QueueStatus::kClosed &&
+                   status != QueueStatus::kCancelled) {
+            metrics_.Increment(MetricCounter::kErrors);
+            const Error error{ErrorCategory::kResourceExhausted, 0, "packet_router", "submit",
+                              "required sink queue rejected an encoded packet", false};
+            {
+                std::scoped_lock lock(error_mutex_);
+                if (!fatal_error_.has_value()) {
+                    fatal_error_ = error;
+                }
+            }
+            fatal_.store(true, std::memory_order_release);
+            Logger::Instance().Log(LogLevel::kError, "packet_router", "sink_queue_rejected",
+                                   DescribeError(error), {{"sink", worker->sink->name()}});
         }
     }
 }
@@ -137,6 +165,7 @@ void PacketRouter::Stop(CloseMode mode) noexcept {
     }
     // 先关闭全部入口，再 join 输出线程，避免线程间停止顺序造成新的包进入。
     for (auto& worker : workers_) {
+        worker->abort_requested.store(mode == CloseMode::kAbort, std::memory_order_release);
         worker->queue->Close(mode);
     }
     for (auto& worker : workers_) {

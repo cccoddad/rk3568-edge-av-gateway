@@ -253,7 +253,7 @@ Result<void> ParseOutputs(const Json& json, std::vector<OutputConfig>& outputs) 
         auto keys = RejectUnknownKeys(
             item, path,
             {"type", "enabled", "required", "validate_timestamps", "path", "queue_capacity",
-             "overflow_policy", "write_delay_ms", "fail_after_packets"});
+             "overflow_policy", "push_timeout_ms", "write_delay_ms", "fail_after_packets"});
         if (!keys) {
             return keys;
         }
@@ -264,6 +264,7 @@ Result<void> ParseOutputs(const Json& json, std::vector<OutputConfig>& outputs) 
         output.validate_timestamps = item.value("validate_timestamps", output.validate_timestamps);
         output.path = item.value("path", output.path);
         output.queue_capacity = item.value("queue_capacity", output.queue_capacity);
+        output.push_timeout_ms = item.value("push_timeout_ms", output.push_timeout_ms);
         output.write_delay_ms = item.value("write_delay_ms", output.write_delay_ms);
         output.fail_after_packets = OptionalNumber<std::uint64_t>(item, "fail_after_packets");
         if (item.contains("overflow_policy")) {
@@ -347,22 +348,36 @@ Result<AppConfig> ConfigLoader::Parse(std::string_view json_text) {
         }
         if (root.contains("video_encoder")) {
             const auto& encoder = root.at("video_encoder");
-            keys =
-                RejectUnknownKeys(encoder, "video_encoder", {"backend", "mock_keyframe_interval"});
+            keys = RejectUnknownKeys(
+                encoder, "video_encoder",
+                {"backend", "mock_keyframe_interval", "codec_name", "bitrate_bps", "gop_size",
+                 "preset"});
             if (!keys) {
                 return Result<AppConfig>::Failure(keys.error());
             }
             config.video_encoder.backend = encoder.value("backend", config.video_encoder.backend);
             config.video_encoder.mock_keyframe_interval = encoder.value(
                 "mock_keyframe_interval", config.video_encoder.mock_keyframe_interval);
+            config.video_encoder.codec_name =
+                encoder.value("codec_name", config.video_encoder.codec_name);
+            config.video_encoder.bitrate_bps =
+                encoder.value("bitrate_bps", config.video_encoder.bitrate_bps);
+            config.video_encoder.gop_size =
+                encoder.value("gop_size", config.video_encoder.gop_size);
+            config.video_encoder.preset = encoder.value("preset", config.video_encoder.preset);
         }
         if (root.contains("audio_encoder")) {
             const auto& encoder = root.at("audio_encoder");
-            keys = RejectUnknownKeys(encoder, "audio_encoder", {"backend"});
+            keys = RejectUnknownKeys(encoder, "audio_encoder",
+                                     {"backend", "codec_name", "bitrate_bps"});
             if (!keys) {
                 return Result<AppConfig>::Failure(keys.error());
             }
             config.audio_encoder.backend = encoder.value("backend", config.audio_encoder.backend);
+            config.audio_encoder.codec_name =
+                encoder.value("codec_name", config.audio_encoder.codec_name);
+            config.audio_encoder.bitrate_bps =
+                encoder.value("bitrate_bps", config.audio_encoder.bitrate_bps);
         }
         if (root.contains("outputs")) {
             auto result = ParseOutputs(root.at("outputs"), config.outputs);
@@ -550,13 +565,41 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
     if (config.inference.max_detections == 0U || config.inference.max_detections > 4096U) {
         return fail("inference.max_detections", "expected value in range [1, 4096]");
     }
-    if (config.video_encoder.backend != "checksum" ||
-        config.video_encoder.mock_keyframe_interval <= 0) {
-        return fail("video_encoder",
-                    "checksum backend and positive keyframe interval are required");
+    if (config.video_encoder.backend == "checksum") {
+        if (config.video_encoder.mock_keyframe_interval <= 0) {
+            return fail("video_encoder.mock_keyframe_interval", "must be positive");
+        }
+    } else if (config.video_encoder.backend == "ffmpeg") {
+#if RKAV_WITH_FFMPEG
+        if (config.video_encoder.codec_name.empty() || config.video_encoder.bitrate_bps <= 0 ||
+            config.video_encoder.gop_size <= 0 || config.video_encoder.preset.empty()) {
+            return fail("video_encoder",
+                        "FFmpeg codec, bitrate, GOP and preset must be configured");
+        }
+        if (config.video.format == PixelFormat::kMjpeg) {
+#if !RKAV_WITH_JPEG
+            return fail("video.format", "FFmpeg H.264 from MJPEG requires the JPEG decoder feature");
+#endif
+        } else if (config.video.format != PixelFormat::kRgb888 &&
+                   config.video.format != PixelFormat::kBgr888) {
+            return fail("video.format", "FFmpeg software baseline requires RGB/BGR or decodable MJPEG");
+        }
+#else
+        return fail("video_encoder.backend", "FFmpeg video encoder is not compiled in");
+#endif
+    } else {
+        return fail("video_encoder.backend", "expected 'checksum' or 'ffmpeg'");
     }
-    if (config.audio_encoder.backend != "checksum") {
-        return fail("audio_encoder.backend", "checksum backend is required");
+    if (config.audio_encoder.backend == "ffmpeg") {
+#if RKAV_WITH_FFMPEG
+        if (config.audio_encoder.codec_name.empty() || config.audio_encoder.bitrate_bps <= 0) {
+            return fail("audio_encoder", "FFmpeg codec and positive bitrate are required");
+        }
+#else
+        return fail("audio_encoder.backend", "FFmpeg audio encoder is not compiled in");
+#endif
+    } else if (config.audio_encoder.backend != "checksum") {
+        return fail("audio_encoder.backend", "expected 'checksum' or 'ffmpeg'");
     }
     bool has_enabled_output = false;  // 最终必须至少存在一个启用的输出。
     for (std::size_t index = 0; index < config.outputs.size(); ++index) {
@@ -565,9 +608,30 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
             continue;
         }
         has_enabled_output = true;
-        if (output.type != "null" && output.type != "jsonl") {
+        if (output.type != "null" && output.type != "jsonl" && output.type != "mp4") {
             return fail("outputs[" + std::to_string(index) + "].type",
-                        "expected 'null' or 'jsonl'");
+                        "expected 'null', 'jsonl' or 'mp4'");
+        }
+        if (output.type == "mp4") {
+#if RKAV_WITH_FFMPEG
+            if (output.path.empty()) {
+                return fail("outputs[" + std::to_string(index) + "].path",
+                            "MP4 output path must not be empty");
+            }
+            if (config.video_encoder.backend != "ffmpeg" ||
+                config.audio_encoder.backend != "ffmpeg") {
+                return fail("outputs[" + std::to_string(index) + "].type",
+                            "MP4 requires real FFmpeg H.264 and AAC encoders");
+            }
+            if (output.overflow_policy != OverflowPolicy::kBlockProducer ||
+                output.push_timeout_ms <= 0) {
+                return fail("outputs[" + std::to_string(index) + "]",
+                            "MP4 requires block_producer and a positive push timeout");
+            }
+#else
+            return fail("outputs[" + std::to_string(index) + "].type",
+                        "MP4 output is not compiled in");
+#endif
         }
         if (output.queue_capacity == 0U || output.queue_capacity > 65'536U) {
             return fail("outputs[" + std::to_string(index) + "].queue_capacity",
@@ -576,6 +640,11 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
         if (output.write_delay_ms < 0) {
             return fail("outputs[" + std::to_string(index) + "].write_delay_ms",
                         "must not be negative");
+        }
+        if (output.push_timeout_ms < 0 ||
+            output.push_timeout_ms >= config.runtime.shutdown_timeout_ms) {
+            return fail("outputs[" + std::to_string(index) + "].push_timeout_ms",
+                        "must be non-negative and shorter than shutdown timeout");
         }
         if (output.write_delay_ms >= config.runtime.shutdown_timeout_ms) {
             return fail("outputs[" + std::to_string(index) + "].write_delay_ms",
@@ -635,7 +704,16 @@ std::string ConfigSummary(const AppConfig& config) {
           {"latency_ms", config.inference.latency_ms},
           {"max_fps", config.inference.max_fps},
           {"queue_capacity", config.inference.queue_capacity},
-          {"overflow_policy", ToString(config.inference.overflow_policy)}}}};
+          {"overflow_policy", ToString(config.inference.overflow_policy)}}},
+        {"video_encoder",
+         {{"backend", config.video_encoder.backend},
+          {"codec_name", config.video_encoder.codec_name},
+          {"bitrate_bps", config.video_encoder.bitrate_bps},
+          {"gop_size", config.video_encoder.gop_size}}},
+        {"audio_encoder",
+         {{"backend", config.audio_encoder.backend},
+          {"codec_name", config.audio_encoder.codec_name},
+          {"bitrate_bps", config.audio_encoder.bitrate_bps}}}};
     return summary.dump();
 }
 

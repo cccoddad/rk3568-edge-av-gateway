@@ -8,6 +8,10 @@
 #include <thread>
 #include <utility>
 
+#if RKAV_WITH_FFMPEG
+#include "rkav/output/ffmpeg_mp4_sink.h"
+#endif
+
 namespace rkav {
 namespace {
 
@@ -34,11 +38,18 @@ Result<void> ApplyFaultAndDelay(const OutputConfig& config, std::uint64_t packet
 }  // namespace
 
 /// 功能：重置计数和 DTS，并打开 Null Sink。
-Result<void> ValidatingNullSink::Open(const OutputConfig& config) {
+Result<void> ValidatingNullSink::Open(const OutputConfig& config,
+                                      std::span<const EncodedStreamInfo> streams) {
     std::scoped_lock lock(mutex_);
     if (open_) {
         return Result<void>::Failure(
             SinkError("null_sink", ErrorCategory::kInvalidState, "sink is already open"));
+    }
+    for (const auto& stream : streams) {
+        auto validation = ValidateStreamInfo(stream);
+        if (!validation) {
+            return validation;
+        }
     }
     config_ = config;
     packet_count_ = 0;
@@ -105,11 +116,18 @@ void ValidatingNullSink::Close() noexcept {
 }
 
 /// 功能：创建父目录并打开/截断 JSONL 文件。
-Result<void> JsonLinePacketSink::Open(const OutputConfig& config) {
+Result<void> JsonLinePacketSink::Open(const OutputConfig& config,
+                                      std::span<const EncodedStreamInfo> streams) {
     std::scoped_lock lock(mutex_);
     if (open_) {
         return Result<void>::Failure(
             SinkError("jsonl_sink", ErrorCategory::kInvalidState, "sink is already open"));
+    }
+    for (const auto& stream : streams) {
+        auto validation = ValidateStreamInfo(stream);
+        if (!validation) {
+            return validation;
+        }
     }
     std::error_code error;  // 使用 error_code 避免文件系统异常穿出接口。
     const std::filesystem::path path(config.path);  // 配置转换后的平台路径。
@@ -202,6 +220,12 @@ Result<std::unique_ptr<IPacketSink>> CreatePacketSink(const OutputConfig& config
         return Result<std::unique_ptr<IPacketSink>>::Success(
             std::make_unique<JsonLinePacketSink>());
     }
+#if RKAV_WITH_FFMPEG
+    if (config.type == "mp4") {
+        return Result<std::unique_ptr<IPacketSink>>::Success(
+            std::make_unique<FfmpegMp4Sink>());
+    }
+#endif
     return Result<std::unique_ptr<IPacketSink>>::Failure(SinkError(
         "sink_factory", ErrorCategory::kNotSupported, "unsupported sink type: " + config.type));
 }

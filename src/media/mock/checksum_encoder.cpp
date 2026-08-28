@@ -36,16 +36,23 @@ Error EncoderError(std::string_view module, ErrorCategory category, std::string 
 }  // namespace
 
 /// 功能：保存视频关键帧周期，重置 flushed 状态并打开编码器。
-Result<void> ChecksumVideoEncoder::Open(const VideoEncoderConfig& config) {
+Result<EncodedStreamInfo> ChecksumVideoEncoder::Open(const VideoEncoderConfig& config,
+                                                     const VideoCapabilities& input) {
     std::scoped_lock lock(mutex_);
     if (open_) {
-        return Result<void>::Failure(EncoderError(
+        return Result<EncodedStreamInfo>::Failure(EncoderError(
             "checksum_video_encoder", ErrorCategory::kInvalidState, "encoder is already open"));
     }
     config_ = config;
     open_ = true;
     flushed_ = false;
-    return Result<void>::Success();
+    EncodedStreamInfo info;
+    info.kind = StreamKind::kVideo;
+    info.codec = Codec::kMockVideoChecksum;
+    info.time_base = Rational{1, 1'000'000};
+    info.width = input.width;
+    info.height = input.height;
+    return Result<EncodedStreamInfo>::Success(std::move(info));
 }
 
 /// 功能：校验原始帧、换算 PTS，并输出一个 Mock 视频摘要包。
@@ -94,16 +101,23 @@ void ChecksumVideoEncoder::Close() noexcept {
 }
 
 /// 功能：重置期望 PTS 并打开音频编码器；当前配置没有额外字段。
-Result<void> ChecksumAudioEncoder::Open(const AudioEncoderConfig&) {
+Result<EncodedStreamInfo> ChecksumAudioEncoder::Open(const AudioEncoderConfig&,
+                                                     const AudioCapabilities& input) {
     std::scoped_lock lock(mutex_);
     if (open_) {
-        return Result<void>::Failure(EncoderError(
+        return Result<EncodedStreamInfo>::Failure(EncoderError(
             "checksum_audio_encoder", ErrorCategory::kInvalidState, "encoder is already open"));
     }
     open_ = true;
     flushed_ = false;
     expected_next_pts_us_.reset();
-    return Result<void>::Success();
+    EncodedStreamInfo info;
+    info.kind = StreamKind::kAudio;
+    info.codec = Codec::kMockAudioChecksum;
+    info.time_base = Rational{1, 1'000'000};
+    info.sample_rate = input.sample_rate;
+    info.channels = input.channels;
+    return Result<EncodedStreamInfo>::Success(std::move(info));
 }
 
 /// 功能：校验 PCM 布局与连续 PTS，然后输出一个 Mock 音频摘要包。

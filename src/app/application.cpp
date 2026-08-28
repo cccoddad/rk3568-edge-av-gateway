@@ -20,6 +20,9 @@
 #endif
 #include "rkav/common/logger.h"
 #include "rkav/media/checksum_encoder.h"
+#if RKAV_WITH_FFMPEG
+#include "rkav/media/ffmpeg_encoder.h"
+#endif
 #if RKAV_WITH_JPEG
 #include "rkav/media/jpeg_video_decoder.h"
 #endif
@@ -171,6 +174,14 @@ Result<void> Application::CreateAndOpenBackends() {
         audio_encoder_ = std::make_unique<ChecksumAudioEncoder>();
     }
 #endif
+#if RKAV_WITH_FFMPEG
+    if (config_.video_encoder.backend == "ffmpeg") {
+        video_encoder_ = std::make_unique<FfmpegVideoEncoder>();
+    }
+    if (config_.audio_encoder.backend == "ffmpeg") {
+        audio_encoder_ = std::make_unique<FfmpegAudioEncoder>();
+    }
+#endif
 #if RKAV_WITH_V4L2
     if (config_.video.backend == "v4l2") {
         video_capture_ = std::make_unique<V4L2VideoCapture>(clock_);
@@ -221,10 +232,35 @@ Result<void> Application::CreateAndOpenBackends() {
                      "MJPEG input with RKNN requires the JPEG decoder feature"));
 #endif
     }
+    if (config_.video_encoder.backend == "ffmpeg" &&
+        video_opened.value().format == PixelFormat::kMjpeg) {
+#if RKAV_WITH_JPEG
+        video_encode_decoder_ = std::make_unique<JpegVideoDecoder>();
+        auto decoder_opened = video_encode_decoder_->Open();
+        if (!decoder_opened) {
+            if (video_decoder_) {
+                video_decoder_->Close();
+            }
+            video_capture_->Close();
+            return decoder_opened;
+        }
+#else
+        if (video_decoder_) {
+            video_decoder_->Close();
+        }
+        video_capture_->Close();
+        return Result<void>::Failure(
+            AppError(ErrorCategory::kNotSupported, "open_video_encode_decoder",
+                     "MJPEG input with FFmpeg H.264 requires the JPEG decoder feature"));
+#endif
+    }
     auto audio_opened = audio_capture_->Open(config_.audio);  // 音频后端打开/协商结果。
     if (!audio_opened) {
         if (video_decoder_) {
             video_decoder_->Close();
+        }
+        if (video_encode_decoder_) {
+            video_encode_decoder_->Close();
         }
         video_capture_->Close();
         return Result<void>::Failure(audio_opened.error());
@@ -244,22 +280,32 @@ Result<void> Application::CreateAndOpenBackends() {
         if (video_decoder_) {
             video_decoder_->Close();
         }
+        if (video_encode_decoder_) {
+            video_encode_decoder_->Close();
+        }
         video_capture_->Close();
         return Result<void>::Failure(model_opened.error());
     }
-    auto video_encoder_opened =
-        video_encoder_->Open(config_.video_encoder);  // 视频编码器初始化结果。
+    VideoCapabilities video_encoder_input = video_opened.value();
+    if (video_encode_decoder_) {
+        video_encoder_input.format = PixelFormat::kRgb888;
+    }
+    auto video_encoder_opened = video_encoder_->Open(
+        config_.video_encoder, video_encoder_input);  // 解码后实际编码输入。
     if (!video_encoder_opened) {
         inference_->Close();
         audio_capture_->Close();
         if (video_decoder_) {
             video_decoder_->Close();
         }
+        if (video_encode_decoder_) {
+            video_encode_decoder_->Close();
+        }
         video_capture_->Close();
-        return video_encoder_opened;
+        return Result<void>::Failure(video_encoder_opened.error());
     }
-    auto audio_encoder_opened =
-        audio_encoder_->Open(config_.audio_encoder);  // 音频编码器初始化结果。
+    auto audio_encoder_opened = audio_encoder_->Open(
+        config_.audio_encoder, audio_opened.value());  // 音频编码器初始化结果。
     if (!audio_encoder_opened) {
         video_encoder_->Close();
         inference_->Close();
@@ -267,9 +313,16 @@ Result<void> Application::CreateAndOpenBackends() {
         if (video_decoder_) {
             video_decoder_->Close();
         }
+        if (video_encode_decoder_) {
+            video_encode_decoder_->Close();
+        }
         video_capture_->Close();
-        return audio_encoder_opened;
+        return Result<void>::Failure(audio_encoder_opened.error());
     }
+
+    encoded_streams_.clear();
+    encoded_streams_.push_back(std::move(video_encoder_opened).value());
+    encoded_streams_.push_back(std::move(audio_encoder_opened).value());
 
     // 所有跨线程通道都使用有界队列，容量和溢出行为来自已校验配置。
     inference_queue_ = std::make_unique<BoundedQueue<VideoFrame>>(
@@ -295,7 +348,7 @@ Result<void> Application::CreateRouter() {
         if (!sink) {
             return Result<void>::Failure(sink.error());
         }
-        auto added = router_->AddSink(output, std::move(sink).value());  // 注册结果。
+        auto added = router_->AddSink(output, std::move(sink).value(), encoded_streams_);  // 注册结果。
         if (!added) {
             return added;
         }
@@ -380,6 +433,12 @@ void Application::StopWorkers(CloseMode mode) noexcept {
     // 第三阶段：处理线程结束后再停止路由，保证正常退出时编码包能够写完。
     if (router_) {
         router_->Stop(mode);
+        if (auto output_error = router_->fatal_error(); output_error.has_value()) {
+            std::scoped_lock lock(status_mutex_);
+            if (!fatal_error_.has_value()) {
+                fatal_error_ = *output_error;
+            }
+        }
     }
     if (monitor_thread_.joinable()) {
         monitor_thread_.join();
@@ -389,6 +448,9 @@ void Application::StopWorkers(CloseMode mode) noexcept {
     }
     if (video_decoder_) {
         video_decoder_->Close();
+    }
+    if (video_encode_decoder_) {
+        video_encode_decoder_->Close();
     }
     if (video_encoder_) {
         video_encoder_->Close();
@@ -656,8 +718,29 @@ void Application::VideoEncodeLoop(std::stop_token stop) {
                 metrics_.Increment(MetricCounter::kExpiredDetections);
             }
         }
-        const TimestampUs started = clock_->NowUs();          // 视频编码开始时间。
-        auto encoded = video_encoder_->Encode(*popped.item);  // 零到多个编码包。
+        VideoFrame encode_frame = std::move(*popped.item);
+        if (encode_frame.format == PixelFormat::kMjpeg) {
+            if (!video_encode_decoder_) {
+                ReportFatal(AppError(ErrorCategory::kNotSupported, "decode_video_for_encode",
+                                     "MJPEG encoding frame has no configured decoder"));
+                break;
+            }
+            const TimestampUs decode_started = clock_->NowUs();
+            auto decoded = video_encode_decoder_->Decode(encode_frame);
+            metrics_.ObserveLatency("video_encode_decode", clock_->NowUs() - decode_started);
+            if (!decoded) {
+                video_encode_health_.MarkError(clock_->NowUs());
+                LogWorkerError("video_encode_decode", decoded.error());
+                if (!decoded.error().retryable) {
+                    ReportFatal(decoded.error());
+                    break;
+                }
+                continue;
+            }
+            encode_frame = std::move(decoded).value();
+        }
+        const TimestampUs started = clock_->NowUs();       // 视频编码开始时间。
+        auto encoded = video_encoder_->Encode(encode_frame);  // 零到多个编码包。
         metrics_.ObserveLatency("video_encode", clock_->NowUs() - started);
         if (!encoded) {
             video_encode_health_.MarkError(clock_->NowUs());
@@ -676,8 +759,12 @@ void Application::VideoEncodeLoop(std::stop_token stop) {
         auto flushed = video_encoder_->Flush();
         if (flushed) {
             for (auto& packet : flushed.value()) {
+                metrics_.Increment(MetricCounter::kVideoPackets);
                 router_->Submit(std::make_shared<const EncodedPacket>(std::move(packet)));
             }
+        } else {
+            LogWorkerError("video_encode_flush", flushed.error());
+            ReportFatal(flushed.error());
         }
     }
     video_encode_health_.SetState(WorkerState::kStopped);
@@ -715,8 +802,12 @@ void Application::AudioEncodeLoop(std::stop_token stop) {
         auto flushed = audio_encoder_->Flush();
         if (flushed) {
             for (auto& packet : flushed.value()) {
+                metrics_.Increment(MetricCounter::kAudioPackets);
                 router_->Submit(std::make_shared<const EncodedPacket>(std::move(packet)));
             }
+        } else {
+            LogWorkerError("audio_encode_flush", flushed.error());
+            ReportFatal(flushed.error());
         }
     }
     audio_encode_health_.SetState(WorkerState::kStopped);

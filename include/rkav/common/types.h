@@ -82,6 +82,20 @@ struct EncodedPacket {
     bool key_frame{false};                // 视频是否关键帧；Mock 音频固定为 true。
     Codec codec{Codec::kUnknown};         // payload 的编码格式。
     std::shared_ptr<Buffer> buffer;       // 编码 payload 共享所有权。
+    std::int64_t duration{0};             // 包覆盖的时间刻度；0 表示后端未提供。
+};
+
+// 编码器在 Open 后返回码流静态信息，封装器据此创建 MP4 stream 和 codec parameters。
+struct EncodedStreamInfo {
+    StreamKind kind{StreamKind::kVideo};
+    Codec codec{Codec::kUnknown};
+    Rational time_base;
+    int width{0};
+    int height{0};
+    int sample_rate{0};
+    int channels{0};
+    int bit_rate{0};
+    std::vector<std::byte> extradata;  // H.264 SPS/PPS 或 AAC AudioSpecificConfig。
 };
 
 // 以下校验函数是所有真实后端和 Mock 后端共同的数据边界保护。
@@ -96,5 +110,7 @@ Result<void> ValidateVideoFrame(const VideoFrame& frame);
 Result<void> ValidateAudioFrame(const AudioFrame& frame);
 /// 校验编码包的 payload、时间基以及媒体类型与编码格式是否匹配。
 Result<void> ValidatePacket(const EncodedPacket& packet);
+/// 校验封装器建流所需的静态 codec 信息。
+Result<void> ValidateStreamInfo(const EncodedStreamInfo& info);
 
 }  // namespace rkav

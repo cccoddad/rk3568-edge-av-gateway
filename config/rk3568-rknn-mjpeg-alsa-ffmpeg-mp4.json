@@ -3,7 +3,7 @@
   "runtime": {
     "mode": "hardware",
     "log_level": "info",
-    "shutdown_timeout_ms": 5000,
+    "shutdown_timeout_ms": 15000,
     "run_duration_seconds": 10
   },
   "video": {
@@ -45,28 +45,32 @@
     "max_result_age_ms": 400
   },
   "video_encoder": {
-    "backend": "checksum",
-    "mock_keyframe_interval": 30
+    "backend": "ffmpeg",
+    "codec_name": "libx264",
+    "bitrate_bps": 3000000,
+    "gop_size": 30,
+    "preset": "veryfast"
   },
   "audio_encoder": {
-    "backend": "checksum"
+    "backend": "ffmpeg",
+    "codec_name": "aac",
+    "bitrate_bps": 128000
   },
   "outputs": [
     {
-      "type": "null",
+      "type": "mp4",
       "enabled": true,
       "required": true,
       "validate_timestamps": true,
-      "queue_capacity": 16,
-      "overflow_policy": "drop_oldest",
-      "push_timeout_ms": 0,
-      "write_delay_ms": 0,
-      "fail_after_packets": null
+      "path": "/userdata/rkav/recordings/software-baseline-10s.mp4",
+      "queue_capacity": 256,
+      "overflow_policy": "block_producer",
+      "push_timeout_ms": 2000
     }
   ],
   "monitoring": {
     "metrics_interval_ms": 1000,
     "health_interval_ms": 500,
-    "worker_stall_timeout_ms": 3000
+    "worker_stall_timeout_ms": 5000
   }
 }

@@ -24,7 +24,8 @@ class PacketRouter {
     ~PacketRouter();
 
     /// 在启动前打开并注册一个 Sink，为它创建独立有界队列。
-    Result<void> AddSink(const OutputConfig& config, std::unique_ptr<IPacketSink> sink);
+    Result<void> AddSink(const OutputConfig& config, std::unique_ptr<IPacketSink> sink,
+                         std::span<const EncodedStreamInfo> streams);
     /// 为所有已注册 Sink 启动消费线程；没有 Sink 时返回配置错误。
     Result<void> Start();
     // Submit 只向各 Sink 的独立有界队列投递，不在编码线程中执行实际 I/O。

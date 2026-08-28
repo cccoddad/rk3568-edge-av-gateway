@@ -160,5 +160,21 @@ TEST(ConfigTest, SinkDelayCannotExceedShutdownDeadline) {
     EXPECT_EQ(result.error().operation, "outputs[0].write_delay_ms");
 }
 
+// FFmpeg 未编译时必须在配置阶段拒绝真实编码，不能静默回退到 Checksum。
+TEST(ConfigTest, FfmpegMediaConfigurationRequiresCompiledFeature) {
+    auto parsed = ConfigLoader::Parse(
+        R"({"video_encoder":{"backend":"ffmpeg"},"audio_encoder":{"backend":"ffmpeg"},"outputs":[{"type":"mp4","path":"recording.mp4","overflow_policy":"block_producer","push_timeout_ms":1000}]})");
+
+#if RKAV_WITH_FFMPEG
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(parsed.value().video_encoder.codec_name, "libx264");
+    EXPECT_EQ(parsed.value().audio_encoder.codec_name, "aac");
+    EXPECT_EQ(parsed.value().outputs.front().type, "mp4");
+#else
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "video_encoder.backend");
+#endif
+}
+
 }  // namespace
 }  // namespace rkav

@@ -13,7 +13,8 @@ namespace rkav {
 class ValidatingNullSink final : public IPacketSink {
    public:
     /// 重置包计数和每路 DTS，并进入可写状态。
-    Result<void> Open(const OutputConfig& config) override;
+    Result<void> Open(const OutputConfig& config,
+                      std::span<const EncodedStreamInfo> streams) override;
     /// 校验包结构和可选 DTS 单调性，但不保存 payload。
     Result<void> Write(const EncodedPacket& packet) override;
     /// 标记刷新完成，之后拒绝 Write。
@@ -39,7 +40,8 @@ class ValidatingNullSink final : public IPacketSink {
 class JsonLinePacketSink final : public IPacketSink {
    public:
     /// 创建父目录并以截断模式打开 JSONL 文件。
-    Result<void> Open(const OutputConfig& config) override;
+    Result<void> Open(const OutputConfig& config,
+                      std::span<const EncodedStreamInfo> streams) override;
     /// 把一个编码包的元数据写成单行 JSON，不写二进制 payload。
     Result<void> Write(const EncodedPacket& packet) override;
     /// 刷新文件流并结束写入。
