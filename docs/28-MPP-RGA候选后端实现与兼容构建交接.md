@@ -4,13 +4,13 @@
 
 ## 1. 当前结论
 
-本轮已实现 RGA 色彩转换加 MPP H.264 候选编码后端，并完成 Windows 非 JPEG Debug 回归和
-Ubuntu 24.04 AArch64 源码编译。原生交叉产物要求 `GLIBC_2.36`、`GLIBC_2.38`，超过 RK3568
-板端的 GLIBC 2.35，兼容门禁按设计拒绝通过。因此没有部署该文件、没有启动网关、没有占用摄像头、
-麦克风、NPU、RGA 或 MPP。
+本轮已实现 RGA 色彩转换加 MPP H.264 候选编码后端。Windows 非 JPEG Debug 回归、Ubuntu 24.04
+原生 AArch64 编译和 Ubuntu 22.04 容器兼容构建均已完成。原生 GCC 13 产物要求
+`GLIBC_2.36`、`GLIBC_2.38`，按门禁拒绝；Ubuntu 22.04 GCC/G++ 11.4 产物最高只要求
+`GLIBC_2.34`，低于 RK3568 板端的 2.35。
 
-下一步不是重跑原生 GCC 13 构建，而是使用项目已有 Ubuntu 22.04 容器产生 ABI 兼容候选产物。
-容器构建尚未执行，结果未知。
+候选文件尚未部署，尚未启动网关，也没有占用摄像头、麦克风、NPU、RGA 或 MPP。当前精确停止在
+板端 ABI 短测前：公开头文件与板端旧 MPP/RGA 运行库是否匹配仍未知。
 
 ## 2. 实现范围与边界
 
@@ -34,6 +34,8 @@ Ubuntu 24.04 AArch64 源码编译。原生交叉产物要求 `GLIBC_2.36`、`GLI
 | Ubuntu 24.04 原生 AArch64 编译 | 40/40 成功，MPP/RGA 目标完成静态库链接 |
 | ELF 架构和动态依赖 | AArch64；仅动态依赖 `librknnrt.so`、`libm.so.6`、`libc.so.6` 和加载器 |
 | GLIBC 门禁 | 失败：最高 `GLIBC_2.38`，板端上限 `GLIBC_2.35` |
+| Ubuntu 22.04 容器 AArch64 编译 | 40/40 成功，GCC/G++ 11.4；最高 `GLIBC_2.34`，通过板端 2.35 上限 |
+| 容器候选程序 SHA-256 | `136a7e0641946f55f398603bc982164c8190dd38566f14f8ad89994043384399` |
 
 原生失败证据目录保留在 Ubuntu：
 
@@ -56,17 +58,17 @@ SHA-256: 2312401aca7dcc75a4f3dda17fcacbd0b0b7783cbfda21acb596473550554b5c
 启动器 SHA-256: b044539be3807648ba90150ac71620e0810366bad11565a8d3272404bc726511
 ```
 
-启动器会校验源码包、创建唯一 `/tmp/rkav-mpp-rga-container-*` 目录、保存
-`container-build.log`，并在 Docker 内使用 Ubuntu 22.04、GCC/G++ 11 和板端 GLIBC 2.35
-上限门禁。它会创建或复用本机 Docker 镜像及缓存，但不会部署或启动 RK3568 网关。
+启动器已成功执行，结果目录为
+`/tmp/rkav-mpp-rga-container-20260828-212452-13839`，其中保存 `container-build.log` 和完整源码、
+产物、配置、`SHA256SUMS`。它使用 Ubuntu 22.04、GCC/G++ 11 和板端 GLIBC 2.35 上限门禁，
+通过后生成候选文件；它不会自动部署或启动 RK3568 网关。
 
 ## 5. 停止位置与下一步
 
-1. 在 Ubuntu 执行容器启动器，先得到 `mpp_rga_container_build=passed` 或第一处明确错误。
-2. 若容器产物通过，复核 ELF、SHA-256、GLIBC 上限和候选头文件来源。
-3. 在用户明确同意后，先只读确认板端无遗留 `rkav-gateway`，再用唯一结果目录部署并进行短时
+1. 已复核容器 ELF、SHA-256、GLIBC 上限和候选头文件来源；`mpp_rga_container_build=passed`。
+2. 在用户明确同意后，先只读确认板端无遗留 `rkav-gateway`，再用唯一结果目录部署并进行短时
    三硬件 + RGA/MPP 测试。
-4. 只有 H.264 elementary stream、RGA 指标、MPP 驱动日志和错误/队列状态均通过后，才可进入
+3. 只有 H.264 elementary stream、RGA 指标、MPP 驱动日志和错误/队列状态均通过后，才可进入
    MPP/RGA 阶段的文档收口；MP4/RTSP 仍按固定后续顺序处理。
 
 ## 6. 专有词
