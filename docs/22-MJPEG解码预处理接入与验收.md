@@ -181,5 +181,7 @@ test "$npu_delta" -eq "$results"
 
 项目没有覆盖原始 `status` 和日志，而是新增 `original-evidence.sha256` 与
 `corrected-validation.log`。五份原始证据均通过 SHA-256 复核，修正规则后的结论为
-`three_hardware_soak_30m=passed_after_validation_rule_correction`。下一阶段是经用户明确确认后
-验证 USB 断连和降级；这次通过不代表 H.264/AAC、MP4、OSD、MPP/RGA 或 RTSP 已完成。
+`three_hardware_soak_30m=passed_after_validation_rule_correction`。后续真实 RKNN 链路 USB
+断连与重插重启也已通过，详见
+[USB 断连与重插恢复验收](24-USB断连与重插恢复验收.md)。这些通过不代表 H.264/AAC、MP4、
+OSD、MPP/RGA 或 RTSP 已完成。
