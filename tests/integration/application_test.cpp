@@ -93,6 +93,24 @@ TEST(ApplicationTest, InferenceMaxFpsSamplesFramesBeforeTheQueue) {
     EXPECT_LE(requests, 5U);
 }
 
+// OSD 只等待已送入推理的帧，且必须拿到相同 sequence/PTS 的结果才计入叠加。
+TEST(ApplicationTest, CpuOverlayAppliesOnlyToExactInferenceSourceFrame) {
+    auto config = SmallRealtimeConfig();
+    config.inference.latency_ms = 0;
+    config.inference.max_fps = 0;
+    config.overlay.enabled = true;
+    config.overlay.wait_for_result_ms = 50;
+    Application app(config);
+    ASSERT_TRUE(app.Start());
+    std::this_thread::sleep_for(250ms);
+    app.RequestStop("overlay_test_complete");
+    ASSERT_TRUE(app.Wait());
+
+    const auto metrics = app.MetricsSnapshot();
+    EXPECT_GT(metrics["counters"]["overlay_applied_total"].get<std::uint64_t>(), 0U);
+    EXPECT_EQ(metrics["counters"]["errors_total"], 0);
+}
+
 // Sink 每包延迟 40ms 时只在自己的容量 2 队列丢包，视频采集仍持续前进。
 TEST(ApplicationTest, SlowSinkIsIsolatedByItsBoundedQueue) {
     auto config = SmallRealtimeConfig();

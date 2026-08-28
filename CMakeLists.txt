@@ -86,6 +86,7 @@ add_library(rkav_core
     src/config/config.cpp
     src/monitor/metrics.cpp
     src/vision/geometry.cpp
+    src/vision/cpu/cpu_overlay.cpp
 )
 target_include_directories(rkav_core PUBLIC include)
 target_link_libraries(rkav_core

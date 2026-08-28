@@ -41,6 +41,7 @@ struct VideoFrame {
     PixelFormat format{PixelFormat::kUnknown};  // 像素排列格式。
     std::shared_ptr<Buffer> buffer;             // 像素数据共享所有权。
     FrameMemory memory;                         // CPU/DMA/MPP 内存来源描述。
+    bool inference_submitted{false};            // 本帧是否已成功投递到推理队列。
 };
 
 struct AudioFrame {

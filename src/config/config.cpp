@@ -240,6 +240,22 @@ Result<void> ParseInference(const Json& json, InferenceConfig& config) {
     return Result<void>::Success();
 }
 
+/// 功能：解析 OSD 开关、实现后端和有界等待参数。
+Result<void> ParseOverlay(const Json& json, OverlayConfig& config) {
+    auto keys = RejectUnknownKeys(json, "overlay",
+                                  {"enabled", "backend", "line_width", "draw_labels",
+                                   "wait_for_result_ms"});
+    if (!keys) {
+        return keys;
+    }
+    config.enabled = json.value("enabled", config.enabled);
+    config.backend = json.value("backend", config.backend);
+    config.line_width = json.value("line_width", config.line_width);
+    config.draw_labels = json.value("draw_labels", config.draw_labels);
+    config.wait_for_result_ms = json.value("wait_for_result_ms", config.wait_for_result_ms);
+    return Result<void>::Success();
+}
+
 /// 功能：解析输出数组；每个数组元素独立校验并追加到 outputs。
 Result<void> ParseOutputs(const Json& json, std::vector<OutputConfig>& outputs) {
     if (!json.is_array()) {
@@ -315,7 +331,8 @@ Result<AppConfig> ConfigLoader::Parse(std::string_view json_text) {
         const Json root = Json::parse(json_text);  // 顶层 JSON 对象。
         auto keys = RejectUnknownKeys(root, "config",
                                       {"schema_version", "runtime", "video", "audio", "inference",
-                                       "video_encoder", "audio_encoder", "outputs", "monitoring"});
+                                       "overlay", "video_encoder", "audio_encoder", "outputs",
+                                       "monitoring"});
         if (!keys) {
             return Result<AppConfig>::Failure(keys.error());
         }
@@ -342,6 +359,12 @@ Result<AppConfig> ConfigLoader::Parse(std::string_view json_text) {
         }
         if (root.contains("inference")) {
             auto result = ParseInference(root.at("inference"), config.inference);
+            if (!result) {
+                return Result<AppConfig>::Failure(result.error());
+            }
+        }
+        if (root.contains("overlay")) {
+            auto result = ParseOverlay(root.at("overlay"), config.overlay);
             if (!result) {
                 return Result<AppConfig>::Failure(result.error());
             }
@@ -565,6 +588,26 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
     if (config.inference.max_detections == 0U || config.inference.max_detections > 4096U) {
         return fail("inference.max_detections", "expected value in range [1, 4096]");
     }
+    if (config.overlay.backend != "cpu") {
+        return fail("overlay.backend", "expected 'cpu'");
+    }
+    if (config.overlay.line_width < 1 || config.overlay.line_width > 8) {
+        return fail("overlay.line_width", "expected value in range [1, 8]");
+    }
+    if (config.overlay.wait_for_result_ms < 0 ||
+        config.overlay.wait_for_result_ms > config.inference.max_result_age_ms) {
+        return fail("overlay.wait_for_result_ms",
+                    "must be non-negative and not exceed inference.max_result_age_ms");
+    }
+    if (config.overlay.enabled && config.video.format != PixelFormat::kRgb888 &&
+        config.video.format != PixelFormat::kBgr888 && config.video.format != PixelFormat::kMjpeg) {
+        return fail("overlay", "CPU OSD requires RGB/BGR or decodable MJPEG video");
+    }
+    if (config.overlay.enabled && config.video.format == PixelFormat::kMjpeg) {
+#if !RKAV_WITH_JPEG
+        return fail("overlay", "MJPEG OSD requires the JPEG decoder feature");
+#endif
+    }
     if (config.video_encoder.backend == "checksum") {
         if (config.video_encoder.mock_keyframe_interval <= 0) {
             return fail("video_encoder.mock_keyframe_interval", "must be positive");
@@ -705,6 +748,12 @@ std::string ConfigSummary(const AppConfig& config) {
           {"max_fps", config.inference.max_fps},
           {"queue_capacity", config.inference.queue_capacity},
           {"overflow_policy", ToString(config.inference.overflow_policy)}}},
+        {"overlay",
+         {{"enabled", config.overlay.enabled},
+          {"backend", config.overlay.backend},
+          {"line_width", config.overlay.line_width},
+          {"draw_labels", config.overlay.draw_labels},
+          {"wait_for_result_ms", config.overlay.wait_for_result_ms}}},
         {"video_encoder",
          {{"backend", config.video_encoder.backend},
           {"codec_name", config.video_encoder.codec_name},

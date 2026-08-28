@@ -30,6 +30,8 @@ enum class MetricCounter {
     kErrors,
     kRecoveries,
     kExpiredDetections,
+    kOverlayApplied,
+    kOverlaySkipped,
     kCount,
 };
 

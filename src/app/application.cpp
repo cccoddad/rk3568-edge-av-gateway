@@ -111,6 +111,7 @@ void Application::RequestStop(std::string reason) noexcept {
             stop_reason_ = std::move(reason);
         }
         status_condition_.notify_all();
+        detection_condition_.notify_all();
     }
 }
 
@@ -202,6 +203,9 @@ Result<void> Application::CreateAndOpenBackends() {
             AppError(ErrorCategory::kNotSupported, "create_backends",
                      "one or more configured backends are not compiled in"));
     }
+    if (config_.overlay.enabled) {
+        overlay_ = std::make_unique<CpuOverlay>(config_.overlay);
+    }
 
     // Open 采用正向顺序，失败回滚采用严格反向顺序。
     auto video_opened = video_capture_->Open(config_.video);  // 视频后端打开/协商结果。
@@ -232,7 +236,7 @@ Result<void> Application::CreateAndOpenBackends() {
                      "MJPEG input with RKNN requires the JPEG decoder feature"));
 #endif
     }
-    if (config_.video_encoder.backend == "ffmpeg" &&
+    if ((config_.video_encoder.backend == "ffmpeg" || config_.overlay.enabled) &&
         video_opened.value().format == PixelFormat::kMjpeg) {
 #if RKAV_WITH_JPEG
         video_encode_decoder_ = std::make_unique<JpegVideoDecoder>();
@@ -569,11 +573,13 @@ void Application::VideoCaptureLoop(std::stop_token stop) {
         video_capture_health_.MarkProgress(clock_->NowUs());
         // 先按实测 NPU 吞吐抽帧，再由 keep_latest 队列处理瞬时积压。
         QueueStatus inference_status = QueueStatus::kOk;
+        frame.inference_submitted = false;
         if (inference_interval_us == 0 || last_inference_pts_us < 0 ||
             frame.pts_us - last_inference_pts_us >= inference_interval_us) {
             inference_status = inference_queue_->Push(frame, stop);
             if (inference_status == QueueStatus::kOk) {
                 last_inference_pts_us = frame.pts_us;
+                frame.inference_submitted = true;
             }
         }
         const auto encode_status =
@@ -687,6 +693,7 @@ void Application::InferenceLoop(std::stop_token stop) {
             std::scoped_lock lock(detection_mutex_);
             latest_detection_ = std::move(shared_result);
         }
+        detection_condition_.notify_all();
         metrics_.Increment(MetricCounter::kInferenceResults);
         inference_health_.MarkProgress(clock_->NowUs());
     }
@@ -704,19 +711,6 @@ void Application::VideoEncodeLoop(std::stop_token stop) {
         }
         if (popped.status != QueueStatus::kOk || !popped.item.has_value()) {
             break;
-        }
-        {
-            std::shared_ptr<const DetectionBatch> latest;  // 锁外使用的不可变检测快照。
-            {
-                std::scoped_lock lock(detection_mutex_);
-                latest = latest_detection_;
-            }
-            // 结果只能用于其来源帧或更晚的帧，并记录超过允许年龄的结果。
-            if (latest && latest->frame_sequence <= popped.item->sequence &&
-                popped.item->pts_us - latest->source_pts_us >
-                    static_cast<TimestampUs>(config_.inference.max_result_age_ms) * 1000) {
-                metrics_.Increment(MetricCounter::kExpiredDetections);
-            }
         }
         VideoFrame encode_frame = std::move(*popped.item);
         if (encode_frame.format == PixelFormat::kMjpeg) {
@@ -738,6 +732,49 @@ void Application::VideoEncodeLoop(std::stop_token stop) {
                 continue;
             }
             encode_frame = std::move(decoded).value();
+        }
+        std::shared_ptr<const DetectionBatch> latest;
+        {
+            std::unique_lock lock(detection_mutex_);
+            if (overlay_ && encode_frame.inference_submitted) {
+                detection_condition_.wait_for(
+                    lock, std::chrono::milliseconds(config_.overlay.wait_for_result_ms),
+                    [this, &encode_frame, stop] {
+                        return stop.stop_requested() || stop_requested_.load(std::memory_order_acquire) ||
+                               (latest_detection_ &&
+                                latest_detection_->frame_sequence >= encode_frame.sequence);
+                    });
+            }
+            latest = latest_detection_;
+        }
+        const bool exact_detection =
+            latest && latest->frame_sequence == encode_frame.sequence &&
+            latest->source_pts_us == encode_frame.pts_us;
+        if (overlay_ && exact_detection) {
+            const TimestampUs result_age_us = clock_->NowUs() - latest->completed_at_us;
+            if (result_age_us <= static_cast<TimestampUs>(config_.inference.max_result_age_ms) * 1000) {
+                const TimestampUs overlay_started = clock_->NowUs();
+                auto overlaid = overlay_->Apply(encode_frame, *latest);
+                metrics_.ObserveLatency("overlay", clock_->NowUs() - overlay_started);
+                if (!overlaid) {
+                    video_encode_health_.MarkError(clock_->NowUs());
+                    LogWorkerError("overlay", overlaid.error());
+                    ReportFatal(overlaid.error());
+                    break;
+                }
+                encode_frame = std::move(overlaid).value();
+                metrics_.Increment(MetricCounter::kOverlayApplied);
+            } else {
+                metrics_.Increment(MetricCounter::kExpiredDetections);
+                metrics_.Increment(MetricCounter::kOverlaySkipped);
+            }
+        } else if (latest && latest->frame_sequence <= encode_frame.sequence &&
+                   encode_frame.pts_us - latest->source_pts_us >
+                       static_cast<TimestampUs>(config_.inference.max_result_age_ms) * 1000) {
+            metrics_.Increment(MetricCounter::kExpiredDetections);
+            if (overlay_) {
+                metrics_.Increment(MetricCounter::kOverlaySkipped);
+            }
         }
         const TimestampUs started = clock_->NowUs();       // 视频编码开始时间。
         auto encoded = video_encoder_->Encode(encode_frame);  // 零到多个编码包。

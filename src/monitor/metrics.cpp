@@ -20,7 +20,9 @@ constexpr std::array<const char*, static_cast<std::size_t>(MetricCounter::kCount
     "packets_consumed_total",
     "errors_total",
     "recoveries_total",
-    "expired_detections_total"};
+    "expired_detections_total",
+    "overlay_applied_total",
+    "overlay_skipped_total"};
 
 /// 功能：在传入样本副本上计算指定百分位数；空样本返回 0。
 TimestampUs Percentile(std::vector<TimestampUs> values, double percentile) {

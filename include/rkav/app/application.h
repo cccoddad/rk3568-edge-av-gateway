@@ -22,6 +22,7 @@
 #include "rkav/output/packet_router.h"
 #include "rkav/queue/bounded_queue.h"
 #include "rkav/vision/inference_engine.h"
+#include "rkav/vision/overlay.h"
 
 namespace rkav {
 
@@ -95,6 +96,7 @@ class Application {
     std::unique_ptr<IInferenceEngine> inference_;   // 推理后端唯一所有者。
     std::unique_ptr<IVideoDecoder> video_decoder_;  // 可选压缩帧解码器唯一所有者。
     std::unique_ptr<IVideoDecoder> video_encode_decoder_;  // 软件编码支路独占解码器。
+    std::unique_ptr<IOverlay> overlay_;                     // 可选 CPU/RGA 像素叠加器。
     std::unique_ptr<IVideoEncoder> video_encoder_;  // 视频编码器唯一所有者。
     std::unique_ptr<IAudioEncoder> audio_encoder_;  // 音频编码器唯一所有者。
     std::unique_ptr<PacketRouter> router_;          // 编码包输出路由器。
@@ -118,6 +120,7 @@ class Application {
     WorkerHealth audio_encode_health_;   // 音频编码 worker 健康状态。
 
     mutable std::mutex detection_mutex_;  // 保护最新检测结果指针的替换和复制。
+    std::condition_variable detection_condition_;  // 通知等待精确来源帧结果的 OSD。
     std::shared_ptr<const DetectionBatch> latest_detection_;  // 不可变检测结果快照。
 };
 

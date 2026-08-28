@@ -176,5 +176,21 @@ TEST(ConfigTest, FfmpegMediaConfigurationRequiresCompiledFeature) {
 #endif
 }
 
+TEST(ConfigTest, ParsesAndValidatesCpuOverlay) {
+    auto parsed = ConfigLoader::Parse(
+        R"({"overlay":{"enabled":true,"backend":"cpu","line_width":3,"draw_labels":false,"wait_for_result_ms":100}})");
+
+    ASSERT_TRUE(parsed);
+    EXPECT_TRUE(parsed.value().overlay.enabled);
+    EXPECT_EQ(parsed.value().overlay.line_width, 3);
+    EXPECT_FALSE(parsed.value().overlay.draw_labels);
+    EXPECT_EQ(parsed.value().overlay.wait_for_result_ms, 100);
+
+    auto invalid = ConfigLoader::Parse(
+        R"({"overlay":{"wait_for_result_ms":201},"inference":{"max_result_age_ms":200}})");
+    ASSERT_FALSE(invalid);
+    EXPECT_EQ(invalid.error().operation, "overlay.wait_for_result_ms");
+}
+
 }  // namespace
 }  // namespace rkav

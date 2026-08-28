@@ -81,6 +81,14 @@ struct InferenceConfig {
     int max_result_age_ms{200};  // 检测结果超过该年龄视为过期。
 };
 
+struct OverlayConfig {
+    bool enabled{false};          // false 时不复制像素、不绘制任何 OSD。
+    std::string backend{"cpu"};  // 当前仅支持 cpu；后续 RGA 保持相同配置契约。
+    int line_width{2};            // 检测框边线像素宽度。
+    bool draw_labels{true};       // 是否绘制类别 ID 和置信度文字。
+    int wait_for_result_ms{80};   // 仅对已送推理的帧等待其精确结果的最长时间。
+};
+
 struct VideoEncoderConfig {
     std::string backend{"checksum"};  // 视频编码后端名称。
     int mock_keyframe_interval{30};   // 每隔多少视频帧标记一个关键帧。
@@ -122,6 +130,7 @@ struct AppConfig {
     VideoConfig video;                  // 视频采集参数。
     AudioConfig audio;                  // 音频采集参数。
     InferenceConfig inference;          // 推理参数。
+    OverlayConfig overlay;              // 视频编码前的检测框和文字叠加参数。
     VideoEncoderConfig video_encoder;   // 视频编码参数。
     AudioEncoderConfig audio_encoder;   // 音频编码参数。
     std::vector<OutputConfig> outputs;  // 一个或多个独立输出。

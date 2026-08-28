@@ -58,9 +58,16 @@ ctest --test-dir "$rkav_build_dir" --output-on-failure --timeout 30 \
     > "$rkav_result_dir/gateway.log" 2>&1
 test -f "$rkav_result_dir/software-baseline.mp4"
 test ! -e "$rkav_result_dir/software-baseline.mp4.part"
+rkav_final_line=$(grep '"event":"application_stopped"' "$rkav_result_dir/gateway.log" | tail -n 1)
+rkav_overlay_applied=$(printf '%s\n' "$rkav_final_line" |
+    sed -n 's/.*\\"overlay_applied_total\\":\([0-9][0-9]*\).*/\1/p')
+test -n "$rkav_overlay_applied"
+test "$rkav_overlay_applied" -gt 0
 sh "$rkav_project_root/tools/validate_mp4.sh" \
     "$rkav_result_dir/software-baseline.mp4" 5 0.5 \
     > "$rkav_result_dir/ffprobe-validation.log"
+printf '%s\n' "overlay_applied_total=$rkav_overlay_applied" \
+    >> "$rkav_result_dir/ffprobe-validation.log"
 
 sha256sum \
     "$rkav_build_dir/rkav-gateway" \

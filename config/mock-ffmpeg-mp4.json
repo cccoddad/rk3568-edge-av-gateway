@@ -39,6 +39,13 @@
     "overflow_policy": "keep_latest",
     "max_result_age_ms": 200
   },
+  "overlay": {
+    "enabled": true,
+    "backend": "cpu",
+    "line_width": 2,
+    "draw_labels": true,
+    "wait_for_result_ms": 80
+  },
   "video_encoder": {
     "backend": "ffmpeg",
     "codec_name": "libx264",
