@@ -23,6 +23,9 @@
 #if RKAV_WITH_FFMPEG
 #include "rkav/media/ffmpeg_encoder.h"
 #endif
+#if RKAV_WITH_MPP && RKAV_WITH_RGA
+#include "rkav/media/mpp_rga_video_encoder.h"
+#endif
 #if RKAV_WITH_JPEG
 #include "rkav/media/jpeg_video_decoder.h"
 #endif
@@ -183,6 +186,11 @@ Result<void> Application::CreateAndOpenBackends() {
         audio_encoder_ = std::make_unique<FfmpegAudioEncoder>();
     }
 #endif
+#if RKAV_WITH_MPP && RKAV_WITH_RGA
+    if (config_.video_encoder.backend == "mpp") {
+        video_encoder_ = std::make_unique<MppRgaVideoEncoder>();
+    }
+#endif
 #if RKAV_WITH_V4L2
     if (config_.video.backend == "v4l2") {
         video_capture_ = std::make_unique<V4L2VideoCapture>(clock_);
@@ -236,7 +244,8 @@ Result<void> Application::CreateAndOpenBackends() {
                      "MJPEG input with RKNN requires the JPEG decoder feature"));
 #endif
     }
-    if ((config_.video_encoder.backend == "ffmpeg" || config_.overlay.enabled) &&
+    if ((config_.video_encoder.backend == "ffmpeg" || config_.video_encoder.backend == "mpp" ||
+         config_.overlay.enabled) &&
         video_opened.value().format == PixelFormat::kMjpeg) {
 #if RKAV_WITH_JPEG
         video_encode_decoder_ = std::make_unique<JpegVideoDecoder>();

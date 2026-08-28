@@ -630,8 +630,27 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
 #else
         return fail("video_encoder.backend", "FFmpeg video encoder is not compiled in");
 #endif
+    } else if (config.video_encoder.backend == "mpp") {
+#if RKAV_WITH_MPP && RKAV_WITH_RGA
+        if (config.video_encoder.bitrate_bps <= 0 || config.video_encoder.gop_size <= 0) {
+            return fail("video_encoder", "MPP H.264 bitrate and GOP must be positive");
+        }
+        if (config.video_encoder.codec_name != "h264") {
+            return fail("video_encoder.codec_name", "MPP backend requires codec_name 'h264'");
+        }
+        if (config.video.format == PixelFormat::kMjpeg) {
+#if !RKAV_WITH_JPEG
+            return fail("video.format", "MPP H.264 from MJPEG requires the JPEG decoder feature");
+#endif
+        } else if (config.video.format != PixelFormat::kRgb888 &&
+                   config.video.format != PixelFormat::kBgr888) {
+            return fail("video.format", "MPP H.264 requires RGB/BGR or decodable MJPEG video");
+        }
+#else
+        return fail("video_encoder.backend", "MPP/RGA video encoder is not compiled in");
+#endif
     } else {
-        return fail("video_encoder.backend", "expected 'checksum' or 'ffmpeg'");
+        return fail("video_encoder.backend", "expected 'checksum', 'ffmpeg' or 'mpp'");
     }
     if (config.audio_encoder.backend == "ffmpeg") {
 #if RKAV_WITH_FFMPEG
@@ -651,9 +670,20 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
             continue;
         }
         has_enabled_output = true;
-        if (output.type != "null" && output.type != "jsonl" && output.type != "mp4") {
+        if (output.type != "null" && output.type != "jsonl" && output.type != "mp4" &&
+            output.type != "h264") {
             return fail("outputs[" + std::to_string(index) + "].type",
-                        "expected 'null', 'jsonl' or 'mp4'");
+                        "expected 'null', 'jsonl', 'h264' or 'mp4'");
+        }
+        if (output.type == "h264") {
+            if (output.path.empty() || !std::string_view(output.path).ends_with(".h264")) {
+                return fail("outputs[" + std::to_string(index) + "].path",
+                            "H.264 elementary output path must end with .h264");
+            }
+            if (config.video_encoder.backend != "mpp") {
+                return fail("outputs[" + std::to_string(index) + "].type",
+                            "H.264 elementary output requires the MPP video encoder");
+            }
         }
         if (output.type == "mp4") {
 #if RKAV_WITH_FFMPEG

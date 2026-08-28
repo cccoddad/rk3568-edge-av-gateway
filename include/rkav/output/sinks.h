@@ -2,6 +2,7 @@
 // 主要知识点：接口实现、文件流、DTS 单调性、故障注入和线程安全状态机。
 #pragma once
 
+#include <filesystem>
 #include <fstream>
 #include <mutex>
 #include <optional>
@@ -58,6 +59,30 @@ class JsonLinePacketSink final : public IPacketSink {
     std::uint64_t packet_count_{0};  // 已成功写入包数。
     bool open_{false};               // 文件是否已打开。
     bool flushed_{false};            // 是否已完成最终刷新。
+};
+
+// 将 H.264 Annex-B 视频包保存为 .h264；音频包保持由路由消费但不写入该视频裸码流。
+class H264ElementarySink final : public IPacketSink {
+   public:
+    Result<void> Open(const OutputConfig& config,
+                      std::span<const EncodedStreamInfo> streams) override;
+    Result<void> Write(const EncodedPacket& packet) override;
+    Result<void> Flush() override;
+    void Close() noexcept override;
+    [[nodiscard]] std::string name() const override { return "h264"; }
+
+   private:
+    Result<void> ValidateVideoTimestamp(const EncodedPacket& packet);
+
+    std::mutex mutex_;
+    OutputConfig config_;
+    std::ofstream output_;
+    std::filesystem::path final_path_;
+    std::filesystem::path partial_path_;
+    std::optional<std::int64_t> last_video_dts_;
+    std::uint64_t packet_count_{0};
+    bool open_{false};
+    bool flushed_{false};
 };
 
 /// 根据 config.type 创建具体 Sink；未知类型返回 kNotSupported。

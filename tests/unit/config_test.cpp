@@ -176,6 +176,21 @@ TEST(ConfigTest, FfmpegMediaConfigurationRequiresCompiledFeature) {
 #endif
 }
 
+// MPP/RGA 未编译时必须拒绝硬件 H.264 配置，不能静默回退为 Checksum 或软件编码。
+TEST(ConfigTest, MppElementaryConfigurationRequiresCompiledFeature) {
+    auto parsed = ConfigLoader::Parse(
+        R"({"video_encoder":{"backend":"mpp","codec_name":"h264","bitrate_bps":1000000,"gop_size":30},"outputs":[{"type":"h264","path":"evidence.h264"}]})");
+
+#if RKAV_WITH_MPP && RKAV_WITH_RGA
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(parsed.value().video_encoder.backend, "mpp");
+    EXPECT_EQ(parsed.value().outputs.front().type, "h264");
+#else
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "video_encoder.backend");
+#endif
+}
+
 TEST(ConfigTest, ParsesAndValidatesCpuOverlay) {
     auto parsed = ConfigLoader::Parse(
         R"({"overlay":{"enabled":true,"backend":"cpu","line_width":3,"draw_labels":false,"wait_for_result_ms":100}})");

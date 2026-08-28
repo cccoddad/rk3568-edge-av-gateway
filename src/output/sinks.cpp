@@ -5,6 +5,7 @@
 #include <chrono>
 #include <filesystem>
 #include <nlohmann/json.hpp>
+#include <string_view>
 #include <thread>
 #include <utility>
 
@@ -210,6 +211,130 @@ void JsonLinePacketSink::Close() noexcept {
     open_ = false;
 }
 
+Result<void> H264ElementarySink::Open(const OutputConfig& config,
+                                      std::span<const EncodedStreamInfo> streams) {
+    std::scoped_lock lock(mutex_);
+    if (open_) {
+        return Result<void>::Failure(
+            SinkError("h264_sink", ErrorCategory::kInvalidState, "sink is already open"));
+    }
+    bool has_h264_video = false;
+    for (const auto& stream : streams) {
+        auto validation = ValidateStreamInfo(stream);
+        if (!validation) {
+            return validation;
+        }
+        has_h264_video = has_h264_video ||
+                         (stream.kind == StreamKind::kVideo && stream.codec == Codec::kH264);
+    }
+    if (!has_h264_video) {
+        return Result<void>::Failure(SinkError(
+            "h264_sink", ErrorCategory::kInvalidConfig, "H.264 elementary output requires H.264 video"));
+    }
+    final_path_ = std::filesystem::path(config.path);
+    partial_path_ = final_path_;
+    partial_path_ += ".part";
+    std::error_code error;
+    if (final_path_.has_parent_path()) {
+        std::filesystem::create_directories(final_path_.parent_path(), error);
+        if (error) {
+            return Result<void>::Failure(SinkError(
+                "h264_sink", ErrorCategory::kIo,
+                "cannot create output directory: " + error.message()));
+        }
+    }
+    if (std::filesystem::exists(final_path_, error) || std::filesystem::exists(partial_path_, error)) {
+        return Result<void>::Failure(SinkError(
+            "h264_sink", ErrorCategory::kIo, "refusing to overwrite an existing H.264 evidence file"));
+    }
+    output_.open(partial_path_, std::ios::out | std::ios::binary);
+    if (!output_) {
+        return Result<void>::Failure(
+            SinkError("h264_sink", ErrorCategory::kIo, "cannot open H.264 partial output"));
+    }
+    config_ = config;
+    last_video_dts_.reset();
+    packet_count_ = 0;
+    flushed_ = false;
+    open_ = true;
+    return Result<void>::Success();
+}
+
+Result<void> H264ElementarySink::ValidateVideoTimestamp(const EncodedPacket& packet) {
+    if (last_video_dts_.has_value() && packet.dts < *last_video_dts_) {
+        return Result<void>::Failure(
+            SinkError("h264_sink", ErrorCategory::kCodec, "video packet DTS moved backwards"));
+    }
+    last_video_dts_ = packet.dts;
+    return Result<void>::Success();
+}
+
+Result<void> H264ElementarySink::Write(const EncodedPacket& packet) {
+    std::scoped_lock lock(mutex_);
+    if (!open_ || flushed_) {
+        return Result<void>::Failure(
+            SinkError("h264_sink", ErrorCategory::kInvalidState, "sink is not writable"));
+    }
+    auto fault = ApplyFaultAndDelay(config_, packet_count_, "h264_sink");
+    if (!fault) {
+        return fault;
+    }
+    auto validation = ValidatePacket(packet);
+    if (!validation) {
+        return validation;
+    }
+    if (packet.kind == StreamKind::kVideo) {
+        if (packet.codec != Codec::kH264) {
+            return Result<void>::Failure(SinkError(
+                "h264_sink", ErrorCategory::kCodec, "video packet is not H.264"));
+        }
+        if (config_.validate_timestamps) {
+            validation = ValidateVideoTimestamp(packet);
+            if (!validation) {
+                return validation;
+            }
+        }
+        output_.write(reinterpret_cast<const char*>(packet.buffer->data()),
+                      static_cast<std::streamsize>(packet.buffer->size()));
+        if (!output_) {
+            return Result<void>::Failure(
+                SinkError("h264_sink", ErrorCategory::kIo, "failed to write H.264 packet"));
+        }
+    }
+    ++packet_count_;
+    return Result<void>::Success();
+}
+
+Result<void> H264ElementarySink::Flush() {
+    std::scoped_lock lock(mutex_);
+    if (!open_) {
+        return Result<void>::Failure(
+            SinkError("h264_sink", ErrorCategory::kInvalidState, "sink is not open"));
+    }
+    output_.flush();
+    if (!output_) {
+        return Result<void>::Failure(
+            SinkError("h264_sink", ErrorCategory::kIo, "failed to flush H.264 output"));
+    }
+    output_.close();
+    std::error_code error;
+    std::filesystem::rename(partial_path_, final_path_, error);
+    if (error) {
+        return Result<void>::Failure(SinkError(
+            "h264_sink", ErrorCategory::kIo, "cannot finalize H.264 output: " + error.message()));
+    }
+    flushed_ = true;
+    return Result<void>::Success();
+}
+
+void H264ElementarySink::Close() noexcept {
+    std::scoped_lock lock(mutex_);
+    if (output_.is_open()) {
+        output_.close();
+    }
+    open_ = false;
+}
+
 /// 功能：根据 type 创建具体 Sink；工厂把类型选择从 Application 中隔离出来。
 Result<std::unique_ptr<IPacketSink>> CreatePacketSink(const OutputConfig& config) {
     if (config.type == "null") {
@@ -219,6 +344,10 @@ Result<std::unique_ptr<IPacketSink>> CreatePacketSink(const OutputConfig& config
     if (config.type == "jsonl") {
         return Result<std::unique_ptr<IPacketSink>>::Success(
             std::make_unique<JsonLinePacketSink>());
+    }
+    if (config.type == "h264") {
+        return Result<std::unique_ptr<IPacketSink>>::Success(
+            std::make_unique<H264ElementarySink>());
     }
 #if RKAV_WITH_FFMPEG
     if (config.type == "mp4") {

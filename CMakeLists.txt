@@ -150,6 +150,43 @@ if(RKAV_WITH_FFMPEG)
     endif()
 endif()
 
+# MPP 和 RGA 必须一起启用：RGA 把 RGB/BGR 转为 MPP H.264 所需的 NV12。库在目标板运行时
+# 通过 dlopen 加载，交叉编译阶段只需要经过核验的头文件，避免把厂商二进制放入仓库。
+if(RKAV_WITH_MPP OR RKAV_WITH_RGA)
+    if(NOT RKAV_WITH_MPP OR NOT RKAV_WITH_RGA)
+        message(FATAL_ERROR "RKAV_WITH_MPP and RKAV_WITH_RGA must be enabled together")
+    endif()
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR
+       NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+        message(FATAL_ERROR "RKAV_WITH_MPP/RKAV_WITH_RGA requires a Linux/aarch64 target")
+    endif()
+    set(RKAV_MPP_HEADERS_ROOT "" CACHE PATH "Rockchip MPP source or SDK root containing inc/rk_mpi.h")
+    set(RKAV_RGA_HEADERS_ROOT "" CACHE PATH "Rockchip librga source or SDK root containing include/im2d.h")
+    set(RKAV_MPP_INCLUDE_DIR "${RKAV_MPP_HEADERS_ROOT}/inc")
+    set(RKAV_RGA_INCLUDE_DIR "${RKAV_RGA_HEADERS_ROOT}/include")
+    if(NOT EXISTS "${RKAV_MPP_INCLUDE_DIR}/rk_mpi.h" OR
+       NOT EXISTS "${RKAV_MPP_INCLUDE_DIR}/rk_venc_cfg.h" OR
+       NOT EXISTS "${RKAV_RGA_INCLUDE_DIR}/im2d.h")
+        message(FATAL_ERROR
+            "Set RKAV_MPP_HEADERS_ROOT and RKAV_RGA_HEADERS_ROOT to verified Rockchip SDK headers")
+    endif()
+
+    add_library(rkav_mpp_rga
+        src/media/mpp/mpp_rga_video_encoder.cpp
+    )
+    target_include_directories(rkav_mpp_rga
+        PUBLIC include
+    )
+    # 厂商公开头文件使用 C 扩展；将其作为系统头文件隔离，不降低项目自身的 -Werror 标准。
+    target_include_directories(rkav_mpp_rga
+        SYSTEM PRIVATE "${RKAV_MPP_INCLUDE_DIR}" "${RKAV_RGA_INCLUDE_DIR}"
+    )
+    target_link_libraries(rkav_mpp_rga
+        PUBLIC rkav_core rkav_project_options
+        PRIVATE ${CMAKE_DL_LIBS} rkav_project_warnings
+    )
+endif()
+
 # JPEG 解码只依赖平台无关 TurboJPEG API，真实 MJPEG 仅在推理抽帧后解码为 RGB888。
 if(RKAV_WITH_JPEG)
     add_library(rkav_jpeg
@@ -264,6 +301,9 @@ endif()
 if(RKAV_WITH_RKNN)
     target_link_libraries(rkav_app PUBLIC rkav_rknn)
 endif()
+if(RKAV_WITH_MPP AND RKAV_WITH_RGA)
+    target_link_libraries(rkav_app PUBLIC rkav_mpp_rga)
+endif()
 
 # main 只负责进程入口，核心逻辑通过 rkav_app 复用和测试。
 add_executable(rkav-gateway app/main.cpp)
@@ -287,6 +327,9 @@ if(RKAV_WITH_RKNN)
             config/rk3568-rknn-mjpeg-alsa.json
             DESTINATION etc/rkav
         )
+        if(RKAV_WITH_MPP AND RKAV_WITH_RGA)
+            install(FILES config/rk3568-rknn-mjpeg-alsa-mpp-h264.json DESTINATION etc/rkav)
+        endif()
     endif()
 endif()
 
