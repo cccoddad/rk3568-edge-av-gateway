@@ -8,9 +8,11 @@
 本仓库源码和公开 Git 仓库元数据；未同步完整 SDK、未构建镜像、未连接或修改开发板，也未覆盖既有
 MPP/RGA 失败证据。
 
-当前结论：**LubanCat 公开仓库可以取得固定的 Linux 5.10.209 内核和通用 RK3568 构建骨架，但没有
-找到一套可由公开 manifest 直接复现的“GEC V11 板级配置 + 5.10.209 + MPP/RGA/RKNN 用户态组件”完整
-SDK。5.10 迁移可继续评估和准备，但现在不能下载若干公开分支后直接上板。**
+当前结论：**官方百度网盘确实提供 `LubanCat_Linux_Generic_Full_SDK_20260729.tgz`（6.63 GB）
+完整源码归档，说明文本明确包含 Linux 5.10.209/6.1.99 和 Buildroot；同时也提供 3.44 GB 的
+Generic SDK。这个归档是 LubanCat 自家板卡的完整 SDK 候选，但没有证据表明它包含 GEC V11 的 DTS、
+defconfig 或补丁，也没有在本次只读评估中下载验证内部文件清单。因此 5.10 迁移可以继续，但不能把
+“网盘归档存在”写成“GEC V11 已适配”。**
 
 ## 2. 已核对的固定来源
 
@@ -22,6 +24,8 @@ SDK。5.10 迁移可继续评估和准备，但现在不能下载若干公开分
 | [GecEdu-RK3568](https://github.com/Leon19960120/Gecedu-RK3568) | `main`：`4f9cd0af934d5aa57861aa65c1b56d88fa38a75e`；5.10 分支：`410d4328a7e0e6a124cb54b73329d4730680ed26` | 文档记录 GEC V11 已启动 5.10.209，但仓库不含目标 DTS/DTSI、完整 defconfig 或可应用补丁 |
 | [LubanCat buildroot](https://github.com/LubanCat/buildroot) | manifest 写 `4c038732919b526ea263fd2316feac97dc082213` | GitHub API 报提交不存在，直接 fetch 报 `not our ref` |
 | LubanCat Buildroot 公开 5.10 标签 | `linux-5.10-gen-rkr1`，commit `3ccfbe398058e2eaac13096ecbbb9c907f66ebd4` | 包规则存在，但 MPP/RGA/RKNPU2 均引用 SDK 邻接的本地 external 源码，未在规则中固定 MPP/RGA commit |
+| [官方百度网盘分享](https://pan.baidu.com/s/19t8AZV9SYTdjn2uObBiSGA) | `LubanCat_Linux_Generic_Full_SDK_20260729.tgz` 6.63 GB；`LubanCat_Linux_Generic_SDK_20260729.tgz` 3.44 GB | 公开目录可见；未点击下载，内部文件未验证 |
+| 官方“源码压缩包选择说明.txt” | 2026-03-19，2 KB | 明确 Generic 内核 5.10.209/6.1.99，Full 在其基础上添加 Buildroot；rk356x 专用包为 4.19.232 |
 
 内核树存在驱动，只证明内核侧实现可得，不证明用户态头文件、动态库和驱动 ABI 已匹配。GEC 文档中的
 运行记录证明迁移曾成功启动，也不等于公开仓库已经包含那棵外部 SDK 工作树。
@@ -45,11 +49,15 @@ SDK。5.10 迁移可继续评估和准备，但现在不能下载若干公开分
 RKNPU2 用户态项目。当前两个 LubanCat RK3568 Buildroot 配置还明确首选 `RK_KERNEL_PREFERRED="6.1"`，
 并使用 `rk356x-lubancat-generic`，不能直接当作 GEC V11 的 5.10 配置。
 
-### 3.3 Full 路线不是公开的 5.10 媒体 SDK
+### 3.3 Git Full 路线不是可在线复现的 5.10 媒体清单
 
 2025-03 至 2026-07 的 dated full manifest 都包含 `buildroot-2024.04-rkr5.xml`。该文件中的 MPP、RGA、
 RKNN Toolkit2 和 RKNPU2 均指向私有 `ssh://git@gitlab.ebf.local/...`，标签为
-`linux-6.1-stan-rkr5`。这既不是公开来源，也不是 5.10 版本线。
+`linux-6.1-stan-rkr5`。这条 Git 在线同步路径既不是公开来源，也不是 5.10 版本线。
+
+但官方网盘说明明确存在 `LubanCat_Linux_Generic_Full_SDK_20260729.tgz`，并说明 Full SDK 在
+Generic SDK 基础上加入 Buildroot，且不能通过在线 Git 更新。它很可能把未公开的 Buildroot 相关
+源码作为归档内容一并提供；在不下载的前提下，不能继续推断其中 MPP/RGA/RKNN 的实际提交和文件清单。
 
 旧 `include/rk356x_buildroot.xml` 留有 MPP `9ffb11ca...`、RGA `1e2f0dbb...`、RKNPU2
 `c0303684...` 等提交，但当前没有顶层 manifest 引用它，`rk-github` 远端定义也已缺失；其中 MPP 提交
@@ -79,8 +87,10 @@ RK_KERNEL_DTS=kernel/arch/arm64/boot/dts/rockchip/rk3568-gec-v11-linux.dts
 - 与该运行镜像匹配的 MPP/RGA/RKNN 用户态版本清单。
 
 LubanCat 固定 5.10.209 内核的 `arch/arm64/boot/dts/rockchip` 目录共 766 个条目，`gec` 名称命中为
-0；固定 `device_rockchip` 提交的全部路径同样为 0。缺口不能靠选择一个同为 RK3568 的 EVB/LubanCat
-DTS 自动消除，因为 DDR、PMIC、时钟、显示、以太网 PHY、USB、音频和外设引脚可能不同。
+0；固定 `device_rockchip` 提交的全部路径同样为 0。网盘 Full 归档内部尚未下载核对，不能据此断言
+它也没有 GEC 文件；但官方说明列出的支持对象只有 LubanCat 0/1/2 等自家板卡。缺口不能靠选择一个
+同为 RK3568 的 EVB/LubanCat DTS 自动消除，因为 DDR、PMIC、时钟、显示、以太网 PHY、USB、音频和
+外设引脚可能不同。
 
 ## 5. 对本网关的直接影响
 
@@ -89,20 +99,23 @@ DTS 自动消除，因为 DDR、PMIC、时钟、显示、以太网 PHY、USB、�
 `librknnrt.so`。现有构建门禁能检查文件存在、AArch64 架构、动态依赖和 GLIBC 上限，不能单独证明 MPP
 配置键、结构体、控制命令和内核驱动语义一致。
 
-因此有两种不同目标：
+因此有三种不同目标：
 
 1. 若继续使用当前 4.19 镜像，只需取得与 `RK356X_Linux_V1.3.2` 运行库匹配的最小头文件/sysroot，
    不必先升级整个系统。
 2. 若迁移到 5.10.209，则必须把 bootloader、GEC DTS、内核、根文件系统、MPP/RGA、RKNN Runtime
    和交叉 sysroot 作为同一个版本化系统验证，不能只换内核或只换头文件。
+3. 若取得并核验官方 Generic Full 归档，可把它作为 5.10.209 + Buildroot 的 LubanCat 基线；仍需
+   单独补 GEC V11 板级资产和验证媒体/NPU 用户态版本，不能直接烧录 GEC 板。
 
 ## 6. 迁移难度与可执行路线
 
-难度评估为**中高**。源码下载和离线构建可以由开发机独立完成；主要风险是公开 GEC 板级源文件缺失，
-以及媒体/NPU 用户态版本没有被 5.10 manifest 固定。推荐继续按以下门禁推进：
+难度评估为**中高**。官方归档本身可作为候选输入，源码下载和离线构建可以由开发机独立完成；主要
+风险是 GEC 板级源文件缺失，以及归档内部媒体/NPU 版本尚未核验。推荐继续按以下门禁推进：
 
-1. 固定 LubanCat generic 2026-07-29 的 manifest、5.10.209 kernel、device、U-Boot、rkbin 和工具链，
-   保存 commit 与 SHA-256；不把 full manifest 的私有 6.1 媒体项目混入。
+1. 在得到明确下载授权后，固定官方 `LubanCat_Linux_Generic_Full_SDK_20260729.tgz` 的压缩包 SHA-256，
+   解压后核对 `.repo/manifest.xml`、kernel-5.10、Buildroot、device、U-Boot、rkbin、工具链及所有
+   external 目录；不把 full manifest 的私有 6.1 Git 路径混入。
 2. 优先向 GEC/LubanCat 来源取得上述 GEC defconfig、DTS/DTSI 和对应 patch；若无法取得，再以现有
    4.19 running DT、厂商提取 DTS 和 GEC 验证文档做可审阅的重新移植，不能伪称原厂配置。
 3. 为 5.10.209 单独锁定公开 MPP、RGA、RKNN Runtime/RKNPU2 组合，并保存源码提交、头文件哈希、
@@ -117,9 +130,11 @@ DTS 自动消除，因为 DDR、PMIC、时钟、显示、以太网 PHY、USB、�
 
 ## 7. 当前精确停止位置
 
-- 已完成公开 manifest、固定内核、固定 device、GEC 主/5.10 分支和 Buildroot 公开标签的只读核对。
+- 已完成公开 manifest、固定内核、固定 device、GEC 主/5.10 分支、Buildroot 公开标签和官方百度网盘
+  归档目录的只读核对。
 - 只在 `out/lubancat-5.10-eval-20260902` 保存 Git 元数据；该目录由项目忽略，不进入提交。
-- 未同步完整 SDK、未下载镜像、未构建、未部署、未修改板端配置，也未启动任何板端进程。
+- 未同步完整 SDK、未下载 6.63 GB/3.44 GB 归档、未下载镜像、未构建、未部署、未修改板端配置，
+  也未启动任何板端进程。
 - 当前 4.19 MPP/RGA 失败候选及板端唯一失败目录保持原状，禁止盲目重跑。
 - 下一工作单元是固定并取得公开 5.10 基础源码，同时继续寻找或重建 GEC V11 板级 patch；任何上板
   动作仍需用户明确确认。
