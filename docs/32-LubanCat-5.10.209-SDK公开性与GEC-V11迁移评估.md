@@ -5,15 +5,18 @@
 ## 1. 本文用途
 
 本文记录 RK3568 实时音视频边缘分析网关对 LubanCat Linux 5.10.209 路线的离线评估。评估读取本仓库、
-公开 Git 元数据，以及用户提供并下载的官方 Full SDK 归档；只提取归档清单、Manifest 和 Git 对象元数据，
-未同步源码工作树、未构建镜像、未连接或修改开发板，也未覆盖既有 MPP/RGA 失败证据。
+公开 Git 元数据、GecEdu 板级资料，以及用户提供并下载的官方 Full SDK 归档；归档已在 Ubuntu 用
+`repo sync --local-only` 离线检出为完整工作树。未构建镜像、未连接或修改开发板，也未覆盖既有
+MPP/RGA 失败证据。
 
 当前结论：**官方百度网盘确实提供 `LubanCat_Linux_Generic_Full_SDK_20260729.tgz`（6.63 GB）
 完整源码归档，说明文本明确包含 Linux 5.10.209/6.1.99 和 Buildroot；同时也提供 3.44 GB 的
 Generic SDK。归档已下载并核验：大小 7,122,238,264 字节，SHA-256 为
 `57A61FD33116A33C477AFB05D037592504B494C17C2AB31AE9B4F32F78473FF7`。其内容是 `.repo` Git 对象包，
 不是已展开的源码树；包含 5.10.209 内核对象和 Full Manifest 指定的 MPP/RGA/RKNPU2 内部标签，归档路径
-没有 GEC/V11 命中。这个归档仍是 LubanCat 自家板卡的 SDK 候选，不能写成“GEC V11 已适配”。**
+没有 GEC/V11 命中。公开 GecEdu 仓库另有 factory DTS、5.10 配置片段和板级差异记录，但没有最终
+GEC DTS/DTSI、完整 defconfig 或可重放 patch。这个归档仍是 LubanCat 自家板卡的 SDK 基线，不能写成
+“GEC V11 已适配”。**
 
 ## 2. 已核对的固定来源
 
@@ -22,7 +25,7 @@ Generic SDK。归档已下载并核验：大小 7,122,238,264 字节，SHA-256 �
 | [LubanCat manifests](https://github.com/LubanCat/manifests) | `5ba5600065b31f2836dd764dd71d365a755ac359` | 公开清单可读取；当前 generic 发布指向 2026-07-29 |
 | [LubanCat kernel](https://github.com/LubanCat/kernel) | `6a5f8ede873d63e305c46c2b6ed1dcf792917564` | Makefile 为 Linux 5.10.209；存在 Rockchip MPP 和 RKNPU 内核驱动目录 |
 | [LubanCat device_rockchip](https://github.com/LubanCat/device_rockchip) | `a1642d64206d5afc54ad6c0c0f0232844f0e9e81` | 有 LubanCat/EVB RK3568 配置；文件路径中无 GEC V11 配置资产 |
-| [GecEdu-RK3568](https://github.com/Leon19960120/Gecedu-RK3568) | `main`：`4f9cd0af934d5aa57861aa65c1b56d88fa38a75e`；5.10 分支：`410d4328a7e0e6a124cb54b73329d4730680ed26` | 文档记录 GEC V11 已启动 5.10.209，但仓库不含目标 DTS/DTSI、完整 defconfig 或可应用补丁 |
+| [GecEdu-RK3568](https://github.com/Leon19960120/Gecedu-RK3568) | `main`：`4f9cd0af934d5aa57861aa65c1b56d88fa38a75e`；5.10 分支：`410d4328a7e0e6a124cb54b73329d4730680ed26` | 提供 factory `rk3568.dts`、配置片段、DTB 工具、5.10.209 运行记录和板级差异；不含最终 DTS/DTSI、完整 defconfig 或可应用补丁 |
 | [LubanCat buildroot](https://github.com/LubanCat/buildroot) | manifest 写 `4c038732919b526ea263fd2316feac97dc082213` | GitHub API 报提交不存在，直接 fetch 报 `not our ref`；该提交在 Full 归档对象包中存在 |
 | LubanCat Buildroot 公开 5.10 标签 | `linux-5.10-gen-rkr1`，commit `3ccfbe398058e2eaac13096ecbbb9c907f66ebd4` | 包规则存在，但 MPP/RGA/RKNPU2 均引用 SDK 邻接的本地 external 源码，未在规则中固定 MPP/RGA commit |
 | [官方百度网盘分享](https://pan.baidu.com/s/19t8AZV9SYTdjn2uObBiSGA) | `LubanCat_Linux_Generic_Full_SDK_20260729.tgz` 7,122,238,264 字节；SHA-256 `57A61FD3...F78473FF7` | 已下载到用户指定路径并完成 tar 清单、Manifest、Git 对象和 GEC 路径核验；归档为 `.repo` 对象包 |
@@ -90,7 +93,19 @@ RK_KERNEL_DTS=kernel/arch/arm64/boot/dts/rockchip/rk3568-gec-v11-linux.dts
 以太网、USB、音频、GPU 和 RKNPU 内核驱动已起来；RKNN 用户态推理和真实 camera sensor 链仍标为待
 验证。
 
-但是 GEC 主分支和 5.10 文档分支均没有：
+GEC 主分支当前已经公开以下可用于重建、但不能冒充最终源码的输入：
+
+- `hardware/Device Tree/rk3568.dts`：从厂商镜像提取的完整反编译 DTS；其 model 仍是
+  `Rockchip RK3568 EVB1 DDR4 V10 Board`，同时包含 MPP、RGA、VEPU/RKVENC、RKNPU、ISP/CIF 等节点；
+- `gec-v11-verified.config.fragment`：记录传感器、触摸、RTC、EEPROM 和 CAN 等已验证选项，但文件自身
+  明确警告它不是从活动 SDK `.config` 读取的完整 defconfig；
+- DTS include 链和五批板级差异：GMAC1、USB VBUS、I2C 传感器、CAN1、GT911、RTL8723DS 的
+  SDMMC1/UART8 接线，以及 DSI0/HDMI 的 VP 路由；
+- `scripts/dtb/` 只读分析脚本，以及 5.10.209 启动、显示、USB、音频、GPU 和 RKNPU 内核驱动证据。
+
+固定 LubanCat 内核提交在线存在原版 `rk3568-evb1-ddr4-v10-linux.dts`、
+`rk3568-evb1-ddr4-v10.dtsi`、`rk3568-evb.dtsi` 和 `rockchip_linux_defconfig`。因此通用基线与主要板级
+差异已经可得；但是 GEC 主分支、历史提交和跨站精确文件名检索仍没有：
 
 - `rockchip_rk3568_gec_defconfig` 的完整内容；
 - `rk3568-gec-v11-linux.dts`、`rk3568-gec-v11.dtsi`、`rk3568-evb-gec.dtsi`；
@@ -128,8 +143,9 @@ LubanCat 固定 5.10.209 内核的 `arch/arm64/boot/dts/rockchip` 目录共 766 
 1. 已固定官方 `LubanCat_Linux_Generic_Full_SDK_20260729.tgz` 的压缩包 SHA-256，并核对
    `.repo/manifest.xml`、kernel-5.10、Buildroot、device、U-Boot、rkbin、工具链及 external 项目对象；
    归档的 Full 媒体/NPU 路径仍锁在私有 `linux-6.1-stan-rkr5`，不把它们误当作公开 5.10 组件。
-2. 优先向 GEC/LubanCat 来源取得上述 GEC defconfig、DTS/DTSI 和对应 patch；若无法取得，再以现有
-   4.19 running DT、厂商提取 DTS 和 GEC 验证文档做可审阅的重新移植，不能伪称原厂配置。
+2. 继续寻找上述最终 GEC defconfig、DTS/DTSI 和对应 patch；并行在 Ubuntu 完整工作树中，以固定
+   EVB1 5.10.209 基线、公开 factory DTS 和 GEC 验证文档做三方差异核对，形成可审阅的重建候选，
+   明确标注来源，不能伪称原厂配置。
 3. 为 5.10.209 单独锁定公开 MPP、RGA、RKNN Runtime/RKNPU2 组合，并保存源码提交、头文件哈希、
    库 SONAME 和 sysroot；先在离线环境构建最小 smoke test。
 4. 构建 boot/rootfs 镜像后，先检查目标架构、内核版本、DTB/FIT 内目标 model、模块与用户态库清单、
@@ -151,9 +167,14 @@ LubanCat 固定 5.10.209 内核的 `arch/arm64/boot/dts/rockchip` 目录共 766 
   也未启动任何板端进程。
 - 精确搜索 `rk3568 + gec`、`rockchip_rk3568_gec` 在 kernel-5.10 和 device/rockchip 中均为 0；归档工作树
   仍没有 GEC/V11 板级资产。Full 媒体/NPU 标签依赖内部 GitLab，但对象已在离线归档中核验。
+- GecEdu 公共仓库 `4f9cd0af...` 已稀疏下载到主仓库忽略的 `out/` 证据目录并完成树与历史核对：最终四个
+  GEC 文件从未提交，补丁目录只有 README；但 factory DTS、配置片段、DTB 工具和五批板级差异可读。
+- 对 `rk3568-gec-v11-linux.dts`、`rk3568-gec-v11.dtsi`、`rk3568-evb-gec.dtsi`、
+  `rockchip_rk3568_gec_defconfig` 的跨站精确检索未找到其它公开副本。
 - 当前 4.19 MPP/RGA 失败候选及板端唯一失败目录保持原状，禁止盲目重跑。
-- 下一工作单元是固定并取得公开 5.10 基础源码，同时继续寻找或重建 GEC V11 板级 patch；任何上板
-  动作仍需用户明确确认。
+- 下一工作单元是在 Ubuntu 完整 5.10.209 工作树中只读核对 EVB1 源文件、配置和可编译目标，再根据
+  public factory DTS 与已验证差异形成候选 patch；任何构建和上板结论都必须另行验证，上板动作仍需
+  用户明确确认。
 
 ## 8. 相关文档
 
