@@ -146,10 +146,11 @@ LubanCat 固定 5.10.209 内核的 `arch/arm64/boot/dts/rockchip` 目录共 766 
   归档目录的只读核对。
 - Full 归档已保存于 `C:\Users\CC\Downloads\lubancat-5.10.209-eval-20260902`，原始下载路径为
   `D:\BaiduNetdiskDownload\LubanCat_Linux_Generic_Full_SDK_20260729.tgz`；压缩包 SHA-256 已固定。
-- 归档已在独立评估目录展开并建立必要对象联接；只读取 Manifest、Git 对象提交和路径清单，未检出源码、
-  未构建、未部署、未修改板端配置，也未启动任何板端进程。
-- 归档内部没有 GEC/V11 路径；Full 媒体/NPU 标签依赖内部 GitLab，Windows 展开缺少 Unix 符号链接，
-  仍需 Ubuntu/WSL 或厂商可复现环境才能检出并构建。
+- 归档已在 Ubuntu 评估目录中用 `repo sync --local-only -j1 --fail-fast` 离线检出 51/51 个项目；工作树
+  已包含 kernel-5.10、Buildroot、MPP、RGA、RKNPU2、U-Boot 和 rkbin。未构建、未部署、未修改板端配置，
+  也未启动任何板端进程。
+- 精确搜索 `rk3568 + gec`、`rockchip_rk3568_gec` 在 kernel-5.10 和 device/rockchip 中均为 0；归档工作树
+  仍没有 GEC/V11 板级资产。Full 媒体/NPU 标签依赖内部 GitLab，但对象已在离线归档中核验。
 - 当前 4.19 MPP/RGA 失败候选及板端唯一失败目录保持原状，禁止盲目重跑。
 - 下一工作单元是固定并取得公开 5.10 基础源码，同时继续寻找或重建 GEC V11 板级 patch；任何上板
   动作仍需用户明确确认。
