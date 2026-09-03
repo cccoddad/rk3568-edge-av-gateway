@@ -42,4 +42,4 @@ phandle。大型 DTS 上连续 7 次达到 PCRE 回溯上限，所以它的打�
 - 当前 FIT `boot.img` 明确禁止刷写；
 - 未部署、未操作开发板；
 - 下一步只读核对 5.10 EVB1 include 链中 `vccio_acodec`、`vcc_1v8`、`vcc_3v3` 和
-  `pmu_io_domains` 的 label/定义，再创建候选 v2 并离线构建。
+  `pmu_io_domains` 的 label/定义，再创建候选 v2 并离线构建。该 label 门禁随后已通过，见第 52 号交接。
