@@ -49,5 +49,5 @@ aarch64-none-linux-gnu-gcc
 - 候选 kernel worktree 仅有预期候选 DTS；
 - 未生成可刷写完整镜像，未部署、未操作开发板。
 
-下一步在隔离视图建立 `python -> python3` 与返回 1 的 `nproc` 局部 shim，先用同一 `gcc-wrapper.py` 复测；
-仅在该复测通过后，才进行一次受控 normal kernel 构建重试。
+隔离视图已建立 `python -> python3` 与返回 1 的 `nproc` 局部 shim；同一 `gcc-wrapper.py` 配合同一 SDK
+默认 GCC 的复测返回 0。下一步进行一次携带该 shim 的受控 normal kernel 构建重试。
