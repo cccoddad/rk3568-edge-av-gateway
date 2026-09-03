@@ -21,7 +21,8 @@ Ubuntu 成功新增 `libgmp-dev` 与 `libgmpxx4ldbl`，安装退出码为 0，�
 ## 3. 已知完整检查范围与时间边界
 
 完整 `check-kernel.sh` 已读取，明确检查：Python、flex、OpenSSL、GMP、MPC、ncurses 和 lz4。下一步批量
-安装或确认对应 Ubuntu 包，再单独运行前置检查，不再为每个依赖重复进入 kernel 构建。
+安装或确认对应 Ubuntu 包，再单独运行前置检查，不再为每个依赖重复进入 kernel 构建。该操作随后已完成，
+完整前置检查通过，详见第 49 号交接。
 
 当前仅以主机 normal kernel 构建为目标，完成度约 85%；依赖补齐后预计 30–90 分钟可得到 kernel/DTB/boot
 构建结论。若目标是开发板安全启动 5.10 并恢复摄像头、音频、网口、NPU、MPP/RGA 等完整业务，当前约
