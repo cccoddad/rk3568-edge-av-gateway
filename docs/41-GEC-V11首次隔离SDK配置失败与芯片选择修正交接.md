@@ -16,7 +16,8 @@ SHA-256 d7357700041387ad1fff278ee82466c9ab9d748abd810ca2e335feaf4f506d5a
 ```
 
 日志显示 `.chip` 不存在，`00-config.sh` 的 `init_hook` 失败，内部 exit code 为 1；随后缺失
-`output/.config`、`output/defconfig`、`device/rockchip/.chip` 与顶层 `kernel`。这些产物缺失证明配置失败。
+`output/.config`、`output/defconfig` 与 `device/rockchip/.chip`。这些配置产物缺失证明配置失败；顶层
+`kernel` 链接由后续 kernel 构建钩子建立，不能作为单独配置阶段的判据。
 
 ## 2. 原因与不可靠返回码
 
