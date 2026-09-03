@@ -39,5 +39,6 @@ SHA-256 f0a430fc80cfc7f9d929fc7eead73ed69976208125c1e9a006614d2ff1197736
 原 SDK device 工作树仍干净；隔离 device 与 kernel 仅保留候选 defconfig/DTS。未部署、未刷写、未操作
 开发板。
 
-下一步先核对 `check-kernel.sh` 的 lz4 最低版本判断和 Ubuntu 软件源候选版本，再安装主机 `lz4` 包并验证。
-安装成功前不重跑 kernel；验证成功后仍使用同一 host shim 和 `-j2` 约束进行一次受控重试。
+后续核对确认 `check-kernel.sh` 要求 `lz4 -h` 含 `favor-decSpeed`。Ubuntu 已有 `/usr/bin/lz4`，软件包
+`1.9.4-1build1.1`、运行时 v1.9.4，门禁为 `PASS`；安装命令没有新增或升级软件包。下一步仍使用同一
+host shim 和 `-j2` 约束进行一次受控重试。
