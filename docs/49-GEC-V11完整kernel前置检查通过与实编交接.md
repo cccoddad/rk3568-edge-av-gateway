@@ -31,5 +31,5 @@ SDK `check-kernel.sh`，退出码为 0，最终 `ALL_KERNEL_PRECHECK_GATE=PASS`�
 原 SDK device 工作树仍干净；隔离 device/kernel 仅有预期候选 defconfig/DTS。尚未在完整前置检查通过后
 重跑 normal kernel，因此仍没有新的 Image、候选 DTB 或 boot 产物；未部署、未刷写、未操作开发板。
 
-下一步使用固定 Python 与 `nproc=1` shim，以实际 `-j2` 执行 normal kernel 构建。主机 kernel 构建准备约
-完成 90%，预计 20–60 分钟得到构建结论；完整开发板 5.10 业务迁移仍不是本阶段已完成能力。
+后续使用固定 Python 与 `nproc=1` shim，以实际 `-j2` 完成 normal kernel 构建，结果见第 50 号交接；
+完整开发板 5.10 业务迁移仍不是本阶段已完成能力。
