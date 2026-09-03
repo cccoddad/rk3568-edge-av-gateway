@@ -19,7 +19,7 @@ RK_KERNEL_DTS_NAME="rk3568-gec-v11-gmac1-candidate"
 `rockchip_linux_defconfig` 返回 2；顶层仍显示 `shell_exit=0`，故该返回码不构成成功证据。候选 DTB 和
 `output/firmware/boot.img` 均不存在，门禁结论为 `KERNEL_GATE=FAIL`。
 
-## 2. 已定位的根因
+## 2. 已定位的根因（修正）
 
 SDK kernel helper 自动选择：
 
@@ -27,18 +27,20 @@ SDK kernel helper 自动选择：
 aarch64-none-linux-gnu-gcc
 ```
 
-kernel `scripts/gcc-wrapper.py` 对其报告 “unknown assembler invoked”，随后
-`scripts/Kconfig.include` 报 “Sorry, this assembler is not supported”。失败发生在设备树编译之前，因此不能
-归因于候选 DTS、GMAC1 配置或开发板硬件。
+表面上 kernel `scripts/gcc-wrapper.py` 使 `scripts/Kconfig.include` 报 “unknown assembler invoked”。但
+两套 SDK GCC 直接传给 `as-version.sh` 均得到 `GNU 23601`，且都解析到同一 SDK assembler；直接运行
+`gcc-wrapper.py` 对两者均返回 127，stderr 为 `/usr/bin/env: python: No such file or directory`。该 wrapper
+的 shebang 依赖 `python`，而 Ubuntu 24.04 只有 `python3`；`as-version.sh` 丢弃 stderr 后才显出误导性的
+汇编器错误。失败发生在设备树编译之前，因此不能归因于候选 DTS、GMAC1 配置或开发板硬件。
 
-此前显式 DTB 和 Image 门禁使用 SDK 预置的另一套工具链
-`aarch64-rockchip1031-linux-gnu-gcc` 并通过汇编器探测。这是下一步的验证方向，但尚未证明它是 SDK 的
-正式选择方式。
+因此不能把另一套 `aarch64-rockchip1031-linux-gnu-gcc` 当成修复方案。下一步验证方向是隔离视图中
+`python -> python3` 的局部兼容 shim，先复测同一 wrapper，不修改系统或替换 SDK 默认 GCC。
 
 ## 3. 并发偏差
 
-即使调用前设置 `MAKEFLAGS=-j2`，SDK 实际执行仍带 `-j3`。SDK helper 显式控制 jobs，外部 MAKEFLAGS
-不可靠。此次失败发生在早期配置阶段，不由并发引起；但在后续重试前必须定位可配置的 jobs 参数。
+即使调用前设置 `MAKEFLAGS=-j2`，SDK 实际执行仍带 `-j3`。源码已确认 `kernel-helper` 使用
+`-j$(( $(nproc) + 1 ))`，因此 2 核虚拟机产生 `-j3`。外部 MAKEFLAGS 不可靠。此次失败发生在早期配置阶段，
+不由并发引起；后续将在隔离视图提供局部 `nproc` 限流 shim，而不修改 SDK 原脚本或系统级命令。
 
 ## 4. 保护状态与下一步
 
@@ -47,5 +49,5 @@ kernel `scripts/gcc-wrapper.py` 对其报告 “unknown assembler invoked”，�
 - 候选 kernel worktree 仅有预期候选 DTS；
 - 未生成可刷写完整镜像，未部署、未操作开发板。
 
-下一步只读检查 `kernel-helper`、构建 helper 和配置符号中有关 `RK_KERNEL_TOOLCHAIN`、`CROSS_COMPILE`、
-`gcc-wrapper.py` 与 jobs 的来源。确认正规的覆盖点后，才在隔离视图进行一次受控重试。
+下一步在隔离视图建立 `python -> python3` 与返回 1 的 `nproc` 局部 shim，先用同一 `gcc-wrapper.py` 复测；
+仅在该复测通过后，才进行一次受控 normal kernel 构建重试。
