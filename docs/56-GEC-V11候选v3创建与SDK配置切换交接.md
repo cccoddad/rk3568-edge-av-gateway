@@ -12,4 +12,4 @@ v3 继承 v2 的 GMAC1、IO 电源域修正，仅启用 `uart0/uart1`，并禁�
 
 使用 `rk3566_rk3568:rockchip_rk3568_gec_v11_wired_serial_candidate_defconfig` 切换成功，
 `output/.config` 已确认候选 defconfig 和 DTS 名称。v3 尚未编译，原 SDK 工作树保持干净，未部署、未刷写、
-未操作开发板。
+未操作开发板。首次构建因 DTS 混入 Markdown 转义文本并缺少结束符在 DTC 阶段失败；证据和最小修正见第 57 号交接。
