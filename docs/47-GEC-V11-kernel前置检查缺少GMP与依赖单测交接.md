@@ -39,5 +39,5 @@ MPP/RGA/RKNN 运行库无关。
 
 原 SDK 仍干净；隔离 device 与 kernel 只含预期候选 defconfig/DTS；未部署、未刷写、未操作开发板。
 
-下一步安装 `libgmp-dev`，核验头文件与软件包版本，然后直接执行同一 SDK `check-kernel.sh` 的前置检查。
-只有整个前置检查返回成功，才再次进入 normal kernel 构建，以减少重复等待。
+`libgmp-dev` 已安装，GMP 头文件编译探针已通过；同一 `check-kernel.sh` 随后在 MPC 头文件处停止。下一步
+见第 48 号交接。
