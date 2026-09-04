@@ -1,0 +1,17 @@
+---
+description: Require evidence-based explanations and verified Git persistence for every RKAV work unit
+alwaysApply: true
+---
+
+# RKAV Operation Reporting
+
+After every command, file edit, build, test, search, or board action, immediately report:
+
+1. What actually ran or changed.
+2. What the output or preserved evidence proves.
+3. Whether it succeeded, failed, or remains unverified.
+4. A plain-language explanation of the relevant technical terms.
+
+Do not omit this report as the context becomes long. Do not expose private chain-of-thought; provide concise, auditable reasons and evidence instead.
+
+After each complete and verifiable work unit, perform proportionate verification; update `docs/19-*`, the latest numbered handoff, and both problem summaries for new actual problems; check Markdown links and `git diff --check`; review the staged diff; then commit and push to `origin/main`. Never force push or claim unverified work is complete.
