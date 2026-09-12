@@ -1,24 +1,56 @@
 # 文件作用：让 RK3568 上的 systemd 以专用用户托管网关进程，并限制可写目录和权限。
-# 主要知识点：服务依赖、失败重启、SIGTERM 优雅停止和 systemd 安全沙箱。
+# 主要知识点：服务依赖、失败重启、SIGTERM 优雅停止、systemd 安全沙箱和 USB 设备访问。
 [Unit]
 Description=RK3568 Audio Video Edge Gateway
 After=network-online.target
 Wants=network-online.target
+# 等待 USB 设备就绪（摄像头和麦克风）
+After=systemd-udev-settle.service
+Wants=systemd-udev-settle.service
 
 [Service]
 Type=simple
 User=rkav
 Group=rkav
-ExecStart=/opt/rkav/bin/rkav-gateway --config /opt/rkav/etc/rkav/mock.json
-Restart=on-failure
-RestartSec=3
-TimeoutStopSec=10
+# 默认配置路径；可通过 systemd override 或环境变量切换
+ExecStart=/opt/rkav/bin/rkav-gateway --config /opt/rkav/etc/rkav/rk3568-rknn-mjpeg-alsa.json
+# 优雅停止：SIGTERM → 等待 ShutdownTimeoutMs → SIGKILL
 KillSignal=SIGTERM
+TimeoutStopSec=15
+# 自动重启策略
+Restart=on-failure
+RestartSec=5
+# 限制重启频率：5 分钟内最多重启 5 次
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+# 安全沙箱
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/rkav
+ReadWritePaths=/var/lib/rkav /tmp
+
+# USB 设备访问（摄像头 /dev/video* 和音频 /dev/snd/*）
+SupplementaryGroups=video audio
+# 允许访问 /dev/bus/usb 用于 USB 设备枚举
+DeviceAllow=/dev/video* rw
+DeviceAllow=/dev/snd/* rw
+DeviceAllow=/dev/dri/* rw
+
+# 网络：RTSP 需要 TCP 8554 端口
+# RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+# 资源限制
+LimitNOFILE=1024
+MemoryMax=512M
+CPUQuota=80%
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rkav-gateway
 
 [Install]
 WantedBy=multi-user.target

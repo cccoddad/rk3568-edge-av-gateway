@@ -671,9 +671,9 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
         }
         has_enabled_output = true;
         if (output.type != "null" && output.type != "jsonl" && output.type != "mp4" &&
-            output.type != "h264") {
+            output.type != "h264" && output.type != "rtsp") {
             return fail("outputs[" + std::to_string(index) + "].type",
-                        "expected 'null', 'jsonl', 'h264' or 'mp4'");
+                        "expected 'null', 'jsonl', 'h264', 'mp4' or 'rtsp'");
         }
         if (output.type == "h264") {
             if (output.path.empty() || !std::string_view(output.path).ends_with(".h264")) {
@@ -704,6 +704,26 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
 #else
             return fail("outputs[" + std::to_string(index) + "].type",
                         "MP4 output is not compiled in");
+#endif
+        }
+        if (output.type == "rtsp") {
+#if RKAV_WITH_FFMPEG
+            if (output.path.empty()) {
+                return fail("outputs[" + std::to_string(index) + "].path",
+                            "RTSP output URL must not be empty");
+            }
+            if (!std::string_view(output.path).starts_with("rtsp://")) {
+                return fail("outputs[" + std::to_string(index) + "].path",
+                            "RTSP output URL must start with rtsp://");
+            }
+            if (config.video_encoder.backend != "ffmpeg" &&
+                config.video_encoder.backend != "mpp") {
+                return fail("outputs[" + std::to_string(index) + "].type",
+                            "RTSP output requires a real H.264 encoder (ffmpeg or mpp)");
+            }
+#else
+            return fail("outputs[" + std::to_string(index) + "].type",
+                        "RTSP output is not compiled in");
 #endif
         }
         if (output.queue_capacity == 0U || output.queue_capacity > 65'536U) {

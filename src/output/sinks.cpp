@@ -11,6 +11,7 @@
 
 #if RKAV_WITH_FFMPEG
 #include "rkav/output/ffmpeg_mp4_sink.h"
+#include "rkav/output/ffmpeg_rtsp_sink.h"
 #endif
 
 namespace rkav {
@@ -353,6 +354,10 @@ Result<std::unique_ptr<IPacketSink>> CreatePacketSink(const OutputConfig& config
     if (config.type == "mp4") {
         return Result<std::unique_ptr<IPacketSink>>::Success(
             std::make_unique<FfmpegMp4Sink>());
+    }
+    if (config.type == "rtsp") {
+        return Result<std::unique_ptr<IPacketSink>>::Success(
+            std::make_unique<FfmpegRtspSink>());
     }
 #endif
     return Result<std::unique_ptr<IPacketSink>>::Failure(SinkError(

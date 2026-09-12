@@ -207,5 +207,45 @@ TEST(ConfigTest, ParsesAndValidatesCpuOverlay) {
     EXPECT_EQ(invalid.error().operation, "overlay.wait_for_result_ms");
 }
 
+// RTSP 输出需要 FFmpeg 编译支持和有效的 rtsp:// URL。
+TEST(ConfigTest, RtspOutputConfigurationRequiresCompiledFeature) {
+    auto parsed = ConfigLoader::Parse(
+        R"({"video_encoder":{"backend":"ffmpeg","codec_name":"libx264","bitrate_bps":2000000,"gop_size":30},"audio_encoder":{"backend":"ffmpeg","codec_name":"aac","bitrate_bps":128000},"outputs":[{"type":"rtsp","path":"rtsp://0.0.0.0:8554/live"}]})");
+
+#if RKAV_WITH_FFMPEG
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(parsed.value().outputs.front().type, "rtsp");
+    EXPECT_EQ(parsed.value().outputs.front().path, "rtsp://0.0.0.0:8554/live");
+#else
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "video_encoder.backend");
+#endif
+}
+
+// RTSP 输出必须使用 rtsp:// 协议。
+TEST(ConfigTest, RtspOutputRequiresRtspUrl) {
+    auto parsed = ConfigLoader::Parse(
+        R"({"video_encoder":{"backend":"ffmpeg","codec_name":"libx264","bitrate_bps":2000000,"gop_size":30},"audio_encoder":{"backend":"ffmpeg","codec_name":"aac","bitrate_bps":128000},"outputs":[{"type":"rtsp","path":"http://example.com/stream"}]})");
+
+#if RKAV_WITH_FFMPEG
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "outputs[0].path");
+#else
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "video_encoder.backend");
+#endif
+}
+
+// RTSP 输出要求 H.264 编码器为真实编码器。
+TEST(ConfigTest, RtspOutputRequiresRealH264Encoder) {
+    auto parsed = ConfigLoader::Parse(
+        R"({"video_encoder":{"backend":"checksum"},"outputs":[{"type":"rtsp","path":"rtsp://0.0.0.0:8554/live"}]})");
+
+    ASSERT_FALSE(parsed);
+    // checksum 后端通过编码器校验，但在 RTSP 输出类型校验时被拒绝：
+    // RTSP 需要 ffmpeg 或 mpp 提供的真实 H.264 编码器。
+    EXPECT_EQ(parsed.error().operation, "outputs[0].type");
+}
+
 }  // namespace
 }  // namespace rkav

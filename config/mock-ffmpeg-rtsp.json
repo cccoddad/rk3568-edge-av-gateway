@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "runtime": {
+    "mode": "mock",
+    "log_level": "info",
+    "shutdown_timeout_ms": 5000,
+    "run_duration_seconds": 10
+  },
+  "video": {
+    "backend": "mock",
+    "device": "/dev/video0",
+    "width": 640,
+    "height": 360,
+    "fps": 30,
+    "format": "RGB888",
+    "capture_timeout_ms": 1000,
+    "queue_capacity": 4,
+    "overflow_policy": "drop_oldest"
+  },
+  "audio": {
+    "backend": "mock",
+    "device": "hw:0,0",
+    "sample_rate": 48000,
+    "channels": 2,
+    "format": "S16_LE",
+    "frame_duration_ms": 20,
+    "capture_timeout_ms": 1000,
+    "queue_capacity_ms": 300,
+    "realtime": true
+  },
+  "inference": {
+    "backend": "mock",
+    "latency_ms": 20,
+    "max_fps": 0,
+    "queue_capacity": 1,
+    "overflow_policy": "keep_latest"
+  },
+  "video_encoder": {
+    "backend": "ffmpeg",
+    "codec_name": "libx264",
+    "bitrate_bps": 2000000,
+    "gop_size": 30,
+    "preset": "ultrafast"
+  },
+  "audio_encoder": {
+    "backend": "ffmpeg",
+    "codec_name": "aac",
+    "bitrate_bps": 128000
+  },
+  "outputs": [
+    {
+      "type": "rtsp",
+      "enabled": true,
+      "required": true,
+      "validate_timestamps": true,
+      "path": "rtsp://0.0.0.0:8554/live",
+      "queue_capacity": 64,
+      "overflow_policy": "drop_oldest",
+      "push_timeout_ms": 0,
+      "write_delay_ms": 0,
+      "fail_after_packets": null
+    }
+  ],
+  "monitoring": {
+    "metrics_interval_ms": 1000,
+    "health_interval_ms": 500,
+    "worker_stall_timeout_ms": 3000
+  }
+}

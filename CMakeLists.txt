@@ -137,6 +137,7 @@ if(RKAV_WITH_FFMPEG)
     add_library(rkav_ffmpeg
         src/media/ffmpeg/ffmpeg_encoder.cpp
         src/output/ffmpeg/ffmpeg_mp4_sink.cpp
+        src/output/ffmpeg/ffmpeg_rtsp_sink.cpp
     )
     target_include_directories(rkav_ffmpeg PUBLIC include)
     target_link_libraries(rkav_ffmpeg
@@ -314,24 +315,28 @@ if(RKAV_WITH_RKNN)
     set_target_properties(rkav-gateway PROPERTIES SKIP_BUILD_RPATH TRUE)
 endif()
 
-install(TARGETS rkav-gateway RUNTIME DESTINATION bin)
-install(FILES config/mock.json DESTINATION etc/rkav)
-if(RKAV_WITH_V4L2)
-    install(FILES config/rk3568-v4l2.json DESTINATION etc/rkav)
-endif()
-if(RKAV_WITH_RKNN)
-    install(FILES config/rk3568-rknn-rgb.json DESTINATION etc/rkav)
-    if(RKAV_WITH_JPEG)
-        install(FILES
-            config/rk3568-rknn-mjpeg.json
-            config/rk3568-rknn-mjpeg-alsa.json
-            DESTINATION etc/rkav
-        )
-        if(RKAV_WITH_MPP AND RKAV_WITH_RGA)
-            install(FILES config/rk3568-rknn-mjpeg-alsa-mpp-h264.json DESTINATION etc/rkav)
+    install(TARGETS rkav-gateway RUNTIME DESTINATION bin)
+    install(FILES config/mock.json DESTINATION etc/rkav)
+    if(RKAV_WITH_V4L2)
+        install(FILES config/rk3568-v4l2.json DESTINATION etc/rkav)
+    endif()
+    if(RKAV_WITH_RKNN)
+        install(FILES config/rk3568-rknn-rgb.json DESTINATION etc/rkav)
+        if(RKAV_WITH_JPEG)
+            install(FILES
+                config/rk3568-rknn-mjpeg.json
+                config/rk3568-rknn-mjpeg-alsa.json
+                DESTINATION etc/rkav
+            )
+            if(RKAV_WITH_MPP AND RKAV_WITH_RGA)
+                install(FILES config/rk3568-rknn-mjpeg-alsa-mpp-h264.json DESTINATION etc/rkav)
+            endif()
         endif()
     endif()
-endif()
+    if(RKAV_WITH_FFMPEG)
+        install(FILES config/mock-ffmpeg-mp4.json DESTINATION etc/rkav)
+        install(FILES config/mock-ffmpeg-rtsp.json DESTINATION etc/rkav)
+    endif()
 
 # 测试依赖只在显式启用时下载和编译，不影响最终板端最小构建。
 if(RKAV_BUILD_TESTS)

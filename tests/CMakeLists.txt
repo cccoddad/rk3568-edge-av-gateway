@@ -14,6 +14,9 @@ add_executable(rkav_tests
 if(RKAV_WITH_JPEG)
     target_sources(rkav_tests PRIVATE unit/jpeg_video_decoder_test.cpp)
 endif()
+if(RKAV_WITH_FFMPEG)
+    target_sources(rkav_tests PRIVATE unit/rtsp_sink_test.cpp)
+endif()
 target_link_libraries(rkav_tests
     PRIVATE
         GTest::gtest_main
