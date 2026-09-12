@@ -291,63 +291,49 @@ Result<EncodedStreamInfo> MppRgaVideoEncoder::Open(const VideoEncoderConfig& con
         return Result<EncodedStreamInfo>::Failure(
             MppRgaError("create_config", result, "cannot allocate MPP encoder config"));
     }
+    // 板端 RK356X_Linux_V1.3.2 运行库按历史拼写注册配置键：rc:fps_*_denorm 从 2022
+    // 年到 develop 分支都被接受，而 rc:fps_*_denom 直到 MPP 1.0.5 才作为别名加入。
+    // 同时记录第一个失败的步骤，便于板端复测直接定位不兼容的键或控制命令。
+    std::string failed_step{"MPP_ENC_GET_CFG"};
     result = impl_->api->control(impl_->context, MPP_ENC_GET_CFG, impl_->config);
+    const auto set_config = [&](const char* key, RK_S32 value) {
+        if (result != MPP_OK) {
+            return;
+        }
+        result = impl_->symbols.config_set_s32(impl_->config, key, value);
+        if (result != MPP_OK) {
+            failed_step = std::string("config_set_s32(") + key + ")";
+        }
+    };
+    set_config("prep:width", impl_->width);
+    set_config("prep:height", impl_->height);
+    set_config("prep:hor_stride", impl_->stride);
+    set_config("prep:ver_stride", impl_->height);
+    set_config("prep:format", MPP_FMT_YUV420SP);
+    set_config("rc:mode", MPP_ENC_RC_MODE_CBR);
+    set_config("rc:bps_target", config.bitrate_bps);
+    set_config("rc:bps_max", config.bitrate_bps * 3 / 2);
+    set_config("rc:bps_min", config.bitrate_bps / 2);
+    set_config("rc:fps_in_num", input.fps);
+    set_config("rc:fps_in_denorm", 1);
+    set_config("rc:fps_out_num", input.fps);
+    set_config("rc:fps_out_denorm", 1);
+    set_config("rc:gop", config.gop_size);
+    set_config("codec:type", MPP_VIDEO_CodingAVC);
     if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "prep:width", impl_->width);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "prep:height", impl_->height);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "prep:hor_stride", impl_->stride);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "prep:ver_stride", impl_->height);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "prep:format", MPP_FMT_YUV420SP);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "rc:mode", MPP_ENC_RC_MODE_CBR);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "rc:bps_target", config.bitrate_bps);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "rc:bps_max", config.bitrate_bps * 3 / 2);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "rc:bps_min", config.bitrate_bps / 2);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "rc:fps_in_num", input.fps);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "rc:fps_in_denom", 1);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "rc:fps_out_num", input.fps);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "rc:fps_out_denom", 1);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "rc:gop", config.gop_size);
-    }
-    if (result == MPP_OK) {
-        result = impl_->symbols.config_set_s32(impl_->config, "codec:type", MPP_VIDEO_CodingAVC);
-    }
-    if (result == MPP_OK) {
+        failed_step = "MPP_ENC_SET_CFG";
         result = impl_->api->control(impl_->context, MPP_ENC_SET_CFG, impl_->config);
     }
     if (result == MPP_OK) {
+        failed_step = "MPP_ENC_SET_HEADER_MODE";
         MppEncHeaderMode header_mode = MPP_ENC_HEADER_MODE_EACH_IDR;
         result = impl_->api->control(impl_->context, MPP_ENC_SET_HEADER_MODE, &header_mode);
     }
     if (result != MPP_OK) {
         impl_->Close();
-        return Result<EncodedStreamInfo>::Failure(
-            MppRgaError("configure_encoder", result, "MPP rejected H.264 encoder configuration"));
+        return Result<EncodedStreamInfo>::Failure(MppRgaError(
+            "configure_encoder", result,
+            "MPP rejected H.264 encoder configuration at " + failed_step));
     }
     impl_->open = true;
     impl_->flushed = false;
