@@ -139,8 +139,8 @@ struct FfmpegRtspSink::Impl {
                          retryable, ErrorCategory::kTimeout);
     }
 
-    /// 功能：只释放当前 RTSP 会话，保留 Sink 的配置和流信息。
-    void ReleaseFormat() noexcept {
+    /// 功能：只释放格式上下文，不做协议收尾。
+    void FreeFormatContext() noexcept {
         if (format != nullptr) {
             // RTSP muxer 设置 AVFMT_NOFILE，网络连接由 muxer 内部管理；
             // 仅对需要文件 IO 的 muxer 关闭由调用方打开的 AVIOContext。
@@ -150,6 +150,18 @@ struct FfmpegRtspSink::Impl {
             avformat_free_context(format);
             format = nullptr;
         }
+    }
+
+    /// 功能：释放当前 RTSP 会话；仍在连接时先补写 trailer 释放 muxer 内部网络资源。
+    void ReleaseFormat() noexcept {
+        if (format != nullptr && connected) {
+            // avformat_free_context 不会替 muxer 收尾；缺少 trailer 会泄漏 RTSP 的
+            // TCP 连接和 RTP 句柄（实测每次断连泄漏 1 个 FD）。
+            ArmTimeout();
+            av_write_trailer(format);
+            DisarmTimeout();
+        }
+        FreeFormatContext();
         video_stream_index.reset();
         audio_stream_index.reset();
         connected = false;
@@ -418,12 +430,17 @@ Result<void> FfmpegRtspSink::Flush() {
         impl_->flushed = true;
         return Result<void>::Success();
     }
+    impl_->ArmTimeout();
     const int trailer = av_write_trailer(impl_->format);
+    impl_->DisarmTimeout();
     if (trailer < 0) {
+        // connected 仍为 true，ReleaseFormat 内部会再尝试一次收尾以释放网络资源。
         impl_->ReleaseFormat();
         return Result<void>::Failure(
             RtspError("write_trailer", trailer, "cannot finalize RTSP stream"));
     }
+    impl_->connected = false;  // 已显式收尾，避免 ReleaseFormat 重复调用 trailer。
+    impl_->ReleaseFormat();
     impl_->flushed = true;
     return Result<void>::Success();
 }
