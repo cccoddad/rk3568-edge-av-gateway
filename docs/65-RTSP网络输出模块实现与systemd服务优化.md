@@ -11,6 +11,12 @@
 RTSP 模块基于 FFmpeg `rtsp` muxer，支持 TCP 传输，可将 H.264/AAC 编码包通过 RTSP 协议
 推送到网络。该模块尚未在板端进行实际网络流测试。
 
+2026-09-12 补充：初版实现存在 `avio_open` 误用（`rtsp` muxer 为 `AVFMT_NOFILE`，不能对 URL
+调用 `avio_open`），本轮已修正并在 Ubuntu + FFmpeg 6.1.1 完成 push 模式端到端验证（捕获
+H.264+AAC MP4，接收端断开后 sink 隔离、网关跑满时长）；曾短暂引入的 `rtsp_mode=listen` 配置
+已回退，因为 FFmpeg 的 `listen` 仅存在于 demuxer，muxer 只能向服务器推流。完整证据见
+[RTSP 输出 PC 端到端验证与实现修正交接](68-RTSP输出PC端到端验证与实现修正交接.md)。
+
 ## 2. 实现范围
 
 ### 2.1 RTSP 输出模块
@@ -23,7 +29,8 @@ RTSP 模块基于 FFmpeg `rtsp` muxer，支持 TCP 传输，可将 H.264/AAC 编
 | `tests/unit/rtsp_sink_test.cpp` | RTSP Sink 工厂和配置校验测试 |
 
 **关键设计决策**：
-- 使用 `avformat_alloc_output_context2` 自动识别 `rtsp://` URL 并选择 RTSP muxer
+- 显式指定 `"rtsp"` muxer；该 muxer 标记 `AVFMT_NOFILE`，网络连接在 `avformat_write_header`
+  内建立，不调用 `avio_open`/`avio_closep`（2026-09-12 修正）
 - 默认 TCP 传输（`rtsp_transport=tcp`），比 UDP 更可靠，适合嵌入式场景
 - 音频流可选：仅 H.264 视频即可建立 RTSP 会话
 - 遵循现有 Sink 模式：`Open → Write → Flush → Close`，线程安全
@@ -61,7 +68,7 @@ RTSP 模块基于 FFmpeg `rtsp` muxer，支持 TCP 传输，可将 H.264/AAC 编
 
 ## 4. 未完成项
 
-- RTSP 模块尚未在 RK3568 板端进行实际网络流测试
+- RK3568 板端的实际网络流测试仍未进行；PC 端 push 模式端到端验证已于 2026-09-12 完成，见 68 号交接
 - RTSP 客户端连接管理和断连恢复尚未实现
 - 尚未配置 Linux 防火墙规则开放 RTSP 端口（默认 8554）
 - systemd 服务尚未在板端进行 2/12 小时长稳验证
@@ -83,5 +90,6 @@ RTSP 模块基于 FFmpeg `rtsp` muxer，支持 TCP 传输，可将 H.264/AAC 编
 ## 7. 相关文档
 
 - [项目当前开发状态](19-项目当前开发状态.md)
+- [RTSP 输出 PC 端到端验证与实现修正交接](68-RTSP输出PC端到端验证与实现修正交接.md)
 - [FFmpeg 软件 MP4 基线验收与交接](25-FFmpeg软件MP4基线验收与交接.md)
 - [MPP/RGA 首次板端 ABI 短测失败与下一步交接](30-MPP-RGA首次板端ABI短测失败与下一步交接.md)

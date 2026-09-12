@@ -83,7 +83,9 @@ struct FfmpegRtspSink::Impl {
 
     void Release() noexcept {
         if (format != nullptr) {
-            if (format->pb != nullptr) {
+            // RTSP muxer 设置 AVFMT_NOFILE，网络连接由 muxer 内部管理；
+            // 仅对需要文件 IO 的 muxer 关闭由调用方打开的 AVIOContext。
+            if (format->pb != nullptr && (format->oformat->flags & AVFMT_NOFILE) == 0) {
                 avio_closep(&format->pb);
             }
             avformat_free_context(format);
@@ -112,6 +114,10 @@ Result<void> FfmpegRtspSink::Open(const OutputConfig& config,
         return Result<void>::Failure(
             RtspError("open", AVERROR(EINVAL), "RTSP output URL is empty"));
     }
+    if (!impl_->url.starts_with("rtsp://")) {
+        return Result<void>::Failure(
+            RtspError("open", AVERROR(EINVAL), "RTSP output URL must start with rtsp://"));
+    }
 
     bool found_video = false;
     bool found_audio = false;
@@ -130,8 +136,9 @@ Result<void> FfmpegRtspSink::Open(const OutputConfig& config,
             "open", AVERROR(EINVAL), "RTSP output requires at least one H.264 video stream"));
     }
 
-    // RTSP muxer：format 名称由 URL 协议决定，FFmpeg 自动选择 rtsp muxer。
-    const int allocated = avformat_alloc_output_context2(&impl_->format, nullptr, nullptr,
+    // 显式选择 rtsp muxer：它标记 AVFMT_NOFILE，ANNOUNCE 连接在
+    // avformat_write_header 内部完成，不能对网络 muxer 调用 avio_open。
+    const int allocated = avformat_alloc_output_context2(&impl_->format, nullptr, "rtsp",
                                                          impl_->url.c_str());
     if (allocated < 0 || impl_->format == nullptr) {
         impl_->Release();
@@ -167,22 +174,12 @@ Result<void> FfmpegRtspSink::Open(const OutputConfig& config,
         impl_->audio_stream_index = audio_stream->index;
     }
 
-    // RTSP 输出不需要打开文件，avformat_alloc_output_context2 已通过 URL 识别协议。
-    // 但如果 format context 没有 pb，则需要为网络输出创建 AVIOContext。
-    if (impl_->format->pb == nullptr) {
-        const int opened = avio_open(&impl_->format->pb, impl_->url.c_str(), AVIO_FLAG_WRITE);
-        if (opened < 0) {
-            impl_->Release();
-            return Result<void>::Failure(
-                RtspError("open_url", opened, "cannot open RTSP URL: " + impl_->url));
-        }
-    }
+    // RTSP muxer 自行管理网络连接（AVFMT_NOFILE），这里不再打开文件或 URL。
 
-    // 设置 RTSP 传输方式：TCP 更可靠，适合嵌入式场景。
+    // TCP 传输更可靠，适合嵌入式场景；RTSP muxer 只支持向服务器推流（ANNOUNCE），
+    // FFmpeg 的 listen 选项仅存在于 demuxer，不能用于输出侧。
     AVDictionary* options = nullptr;
     av_dict_set(&options, "rtsp_transport", "tcp", 0);
-    // 设置 GOP 大小和初始关键帧，让客户端能更快收到第一帧。
-    av_dict_set(&options, "gop_size", "30", 0);
     const int header = avformat_write_header(impl_->format, &options);
     av_dict_free(&options);
     if (header < 0) {

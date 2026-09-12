@@ -105,7 +105,7 @@ struct AudioEncoderConfig {
 };
 
 struct OutputConfig {
-    std::string type{"null"};  // 输出类型：null、jsonl 或 mp4。
+    std::string type{"null"};  // 输出类型：null、jsonl、h264、mp4 或 rtsp。
     bool enabled{true};        // false 时完全跳过该输出。
     // 必需输出失败会停止整个应用；非必需输出失败时只隔离该输出。
     bool required{true};

@@ -7,6 +7,9 @@ Wants=network-online.target
 # 等待 USB 设备就绪（摄像头和麦克风）
 After=systemd-udev-settle.service
 Wants=systemd-udev-settle.service
+# 限制重启频率：5 分钟内最多重启 5 次（systemd 要求这两个键放在 [Unit] 段）
+StartLimitBurst=5
+StartLimitIntervalSec=300
 
 [Service]
 Type=simple
@@ -20,9 +23,6 @@ TimeoutStopSec=15
 # 自动重启策略
 Restart=on-failure
 RestartSec=5
-# 限制重启频率：5 分钟内最多重启 5 次
-StartLimitBurst=5
-StartLimitIntervalSec=300
 
 # 安全沙箱
 NoNewPrivileges=true
