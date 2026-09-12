@@ -18,6 +18,7 @@ struct PacketRouter::SinkWorker {
     std::jthread thread;  // 唯一调用该 Sink::Write 的消费线程。
     WorkerHealth health;  // 输出线程的进展和错误状态。
     std::atomic_bool abort_requested{false};  // Abort 路径禁止写完整文件 trailer。
+    TimestampUs last_retryable_report_us{0};  // 上次上报可重试错误的时刻，用于节流。
 };
 
 /// 功能：保存统一时钟和共享指标仓库；尚不创建线程。
@@ -77,8 +78,25 @@ Result<void> PacketRouter::Start() {
                 }
                 auto result = target->sink->Write(**popped.item);  // 同步写入结果。
                 if (!result) {
-                    metrics_.Increment(MetricCounter::kErrors);
                     target->health.MarkError(clock_->NowUs());
+                    if (result.error().retryable) {
+                        // Sink 声明可恢复（例如 RTSP 断连）：保持线程和队列，由 Sink 自行退避重连。
+                        // 错误计数与日志按固定间隔节流，避免断连期间按包刷屏。
+                        const TimestampUs now_us = clock_->NowUs();
+                        constexpr TimestampUs kRetryableReportIntervalUs = 1'000'000;
+                        if (target->last_retryable_report_us == 0 ||
+                            now_us - target->last_retryable_report_us >=
+                                kRetryableReportIntervalUs) {
+                            target->last_retryable_report_us = now_us;
+                            metrics_.Increment(MetricCounter::kErrors);
+                            target->health.SetState(WorkerState::kDegraded);
+                            Logger::Instance().Log(LogLevel::kWarn, "packet_router",
+                                                   "sink_write_retry", DescribeError(result.error()),
+                                                   {{"sink", target->sink->name()}});
+                        }
+                        continue;
+                    }
+                    metrics_.Increment(MetricCounter::kErrors);
                     Logger::Instance().Log(LogLevel::kError, "packet_router", "sink_write_failed",
                                            DescribeError(result.error()),
                                            {{"sink", target->sink->name()}});
@@ -100,6 +118,13 @@ Result<void> PacketRouter::Start() {
                 }
                 metrics_.Increment(MetricCounter::kPacketsConsumed);
                 target->health.MarkProgress(clock_->NowUs());
+                if (target->health.state() == WorkerState::kDegraded) {
+                    // 可重试错误后的首次成功写入表示输出已恢复，重新标记为运行中。
+                    target->health.SetState(WorkerState::kRunning);
+                    Logger::Instance().Log(LogLevel::kInfo, "packet_router", "sink_write_recovered",
+                                           "sink resumed after retryable failure",
+                                           {{"sink", target->sink->name()}});
+                }
             }
             if (!target->abort_requested.load(std::memory_order_acquire)) {
                 auto flushed = target->sink->Flush();

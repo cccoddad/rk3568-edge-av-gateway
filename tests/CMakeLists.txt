@@ -6,6 +6,7 @@ add_executable(rkav_tests
     unit/core_test.cpp
     unit/cpu_overlay_test.cpp
     unit/h264_elementary_sink_test.cpp
+    unit/packet_router_test.cpp
     unit/queue_test.cpp
     unit/config_test.cpp
     unit/mock_components_test.cpp

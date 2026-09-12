@@ -268,8 +268,9 @@ Result<void> ParseOutputs(const Json& json, std::vector<OutputConfig>& outputs) 
             "outputs[" + std::to_string(index) + ']';  // 用于错误定位的数组路径。
         auto keys = RejectUnknownKeys(
             item, path,
-            {"type", "enabled", "required", "validate_timestamps", "path", "queue_capacity",
-             "overflow_policy", "push_timeout_ms", "write_delay_ms", "fail_after_packets"});
+            {"type", "enabled", "required", "validate_timestamps", "path",
+             "reconnect_interval_ms", "queue_capacity", "overflow_policy", "push_timeout_ms",
+             "write_delay_ms", "fail_after_packets"});
         if (!keys) {
             return keys;
         }
@@ -279,6 +280,8 @@ Result<void> ParseOutputs(const Json& json, std::vector<OutputConfig>& outputs) 
         output.required = item.value("required", output.required);
         output.validate_timestamps = item.value("validate_timestamps", output.validate_timestamps);
         output.path = item.value("path", output.path);
+        output.reconnect_interval_ms =
+            item.value("reconnect_interval_ms", output.reconnect_interval_ms);
         output.queue_capacity = item.value("queue_capacity", output.queue_capacity);
         output.push_timeout_ms = item.value("push_timeout_ms", output.push_timeout_ms);
         output.write_delay_ms = item.value("write_delay_ms", output.write_delay_ms);
@@ -725,6 +728,14 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
             return fail("outputs[" + std::to_string(index) + "].type",
                         "RTSP output is not compiled in");
 #endif
+        }
+        if (output.reconnect_interval_ms < 0 || output.reconnect_interval_ms > 60'000) {
+            return fail("outputs[" + std::to_string(index) + "].reconnect_interval_ms",
+                        "expected value in range [0, 60000]");
+        }
+        if (output.type != "rtsp" && output.reconnect_interval_ms != 0) {
+            return fail("outputs[" + std::to_string(index) + "].reconnect_interval_ms",
+                        "only RTSP outputs accept a reconnect interval");
         }
         if (output.queue_capacity == 0U || output.queue_capacity > 65'536U) {
             return fail("outputs[" + std::to_string(index) + "].queue_capacity",

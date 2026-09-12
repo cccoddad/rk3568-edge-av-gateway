@@ -111,6 +111,8 @@ struct OutputConfig {
     bool required{true};
     bool validate_timestamps{true};  // 是否检查每路 DTS 不倒退。
     std::string path;                // JSONL 等文件输出路径。
+    // RTSP 断连自动重连的最小间隔（毫秒）；0 表示关闭重连，写入失败即隔离。
+    int reconnect_interval_ms{0};
     std::size_t queue_capacity{16};  // 此输出独立队列的包数量上限。
     OverflowPolicy overflow_policy{OverflowPolicy::kDropOldest};  // 满队列处理方式。
     int push_timeout_ms{0};  // block_producer 最长等待时间；0 表示不等待。

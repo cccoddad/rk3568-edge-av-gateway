@@ -1,13 +1,16 @@
 // 文件作用：把 H.264/AAC 编码包通过 FFmpeg RTSP muxer 推送到网络。
-// 主要知识点：RTSP 协议、avformat network I/O、TCP/UDP 传输选择、连接生命周期。
+// 主要知识点：RTSP 协议、avformat network I/O、TCP 传输选择、会话生命周期与断连重连。
 #include "rkav/output/ffmpeg_rtsp_sink.h"
 
 #include <array>
+#include <chrono>
 #include <cstring>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
+
+#include "rkav/common/logger.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -19,7 +22,8 @@ extern "C" {
 namespace rkav {
 namespace {
 
-Error RtspError(std::string_view operation, int code, std::string message) {
+Error RtspError(std::string_view operation, int code, std::string message,
+                bool retryable = false) {
     std::array<char, AV_ERROR_MAX_STRING_SIZE> detail{};
     if (code < 0) {
         av_strerror(code, detail.data(), detail.size());
@@ -27,7 +31,7 @@ Error RtspError(std::string_view operation, int code, std::string message) {
         message += detail.data();
     }
     return Error{ErrorCategory::kIo, code, "ffmpeg_rtsp_sink", std::string(operation),
-                 std::move(message), false};
+                 std::move(message), retryable};
 }
 
 AVRational ToAvRational(Rational value) {
@@ -78,10 +82,16 @@ struct FfmpegRtspSink::Impl {
     EncodedStreamInfo video_info;
     EncodedStreamInfo audio_info;
     std::string url;
+    bool has_audio{false};
     bool open{false};
+    bool connected{false};  // 当前是否存在已写入流头的 RTSP 会话。
     bool flushed{false};
+    bool reconnect_enabled{false};  // 由 reconnect_interval_ms > 0 决定。
+    int reconnect_interval_ms{0};   // 断连后的最小重连间隔；0 表示关闭重连。
+    std::chrono::steady_clock::time_point next_reconnect_at{};  // 下次允许重连的时刻。
 
-    void Release() noexcept {
+    /// 功能：只释放当前 RTSP 会话，保留 Sink 的配置和流信息。
+    void ReleaseFormat() noexcept {
         if (format != nullptr) {
             // RTSP muxer 设置 AVFMT_NOFILE，网络连接由 muxer 内部管理；
             // 仅对需要文件 IO 的 muxer 关闭由调用方打开的 AVIOContext。
@@ -93,8 +103,82 @@ struct FfmpegRtspSink::Impl {
         }
         video_stream_index.reset();
         audio_stream_index.reset();
+        connected = false;
+    }
+
+    /// 功能：释放全部资源并恢复初始状态。
+    void Release() noexcept {
+        ReleaseFormat();
         open = false;
         flushed = false;
+        reconnect_enabled = false;
+        reconnect_interval_ms = 0;
+    }
+
+    /// 功能：按配置间隔安排下一次重连尝试。
+    void ScheduleNextReconnect() {
+        next_reconnect_at = std::chrono::steady_clock::now() +
+                            std::chrono::milliseconds(reconnect_interval_ms);
+    }
+
+    /// 功能：判断是否到达允许重连的时刻；关闭重连时恒为 false。
+    [[nodiscard]] bool ReconnectDue() const {
+        return reconnect_enabled && std::chrono::steady_clock::now() >= next_reconnect_at;
+    }
+
+    /// 功能：为当前 URL 新建 RTSP 会话并写入流头；失败时释放半初始化上下文。
+    Result<void> Connect() {
+        ReleaseFormat();
+        // 显式选择 rtsp muxer：它标记 AVFMT_NOFILE，ANNOUNCE 连接在
+        // avformat_write_header 内部完成，不能对网络 muxer 调用 avio_open。
+        const int allocated =
+            avformat_alloc_output_context2(&format, nullptr, "rtsp", url.c_str());
+        if (allocated < 0 || format == nullptr) {
+            ReleaseFormat();
+            return Result<void>::Failure(
+                RtspError("allocate_context", allocated, "cannot allocate RTSP muxer context"));
+        }
+        AVStream* video_stream = avformat_new_stream(format, nullptr);
+        if (video_stream == nullptr) {
+            ReleaseFormat();
+            return Result<void>::Failure(
+                RtspError("create_stream", AVERROR(ENOMEM), "cannot create RTSP video stream"));
+        }
+        auto configured = ConfigureStream(*video_stream, video_info);
+        if (!configured) {
+            ReleaseFormat();
+            return configured;
+        }
+        video_stream_index = video_stream->index;
+
+        if (has_audio) {
+            AVStream* audio_stream = avformat_new_stream(format, nullptr);
+            if (audio_stream == nullptr) {
+                ReleaseFormat();
+                return Result<void>::Failure(RtspError("create_stream", AVERROR(ENOMEM),
+                                                       "cannot create RTSP audio stream"));
+            }
+            configured = ConfigureStream(*audio_stream, audio_info);
+            if (!configured) {
+                ReleaseFormat();
+                return configured;
+            }
+            audio_stream_index = audio_stream->index;
+        }
+
+        // TCP 传输更可靠，适合嵌入式场景；RTSP muxer 只支持向服务器推流（ANNOUNCE），
+        // FFmpeg 的 listen 选项仅存在于 demuxer，不能用于输出侧。
+        AVDictionary* options = nullptr;
+        av_dict_set(&options, "rtsp_transport", "tcp", 0);
+        const int header = avformat_write_header(format, &options);
+        av_dict_free(&options);
+        if (header < 0) {
+            ReleaseFormat();
+            return Result<void>::Failure(
+                RtspError("write_header", header, "cannot write RTSP stream header"));
+        }
+        connected = true;
+        return Result<void>::Success();
     }
 };
 
@@ -136,56 +220,26 @@ Result<void> FfmpegRtspSink::Open(const OutputConfig& config,
             "open", AVERROR(EINVAL), "RTSP output requires at least one H.264 video stream"));
     }
 
-    // 显式选择 rtsp muxer：它标记 AVFMT_NOFILE，ANNOUNCE 连接在
-    // avformat_write_header 内部完成，不能对网络 muxer 调用 avio_open。
-    const int allocated = avformat_alloc_output_context2(&impl_->format, nullptr, "rtsp",
-                                                         impl_->url.c_str());
-    if (allocated < 0 || impl_->format == nullptr) {
-        impl_->Release();
-        return Result<void>::Failure(
-            RtspError("allocate_context", allocated, "cannot allocate RTSP muxer context"));
-    }
+    impl_->has_audio = found_audio;
+    impl_->reconnect_enabled = config.reconnect_interval_ms > 0;
+    impl_->reconnect_interval_ms = config.reconnect_interval_ms;
 
-    AVStream* video_stream = avformat_new_stream(impl_->format, nullptr);
-    if (video_stream == nullptr) {
-        impl_->Release();
-        return Result<void>::Failure(
-            RtspError("create_stream", AVERROR(ENOMEM), "cannot create RTSP video stream"));
-    }
-    auto configured = ConfigureStream(*video_stream, impl_->video_info);
-    if (!configured) {
-        impl_->Release();
-        return configured;
-    }
-    impl_->video_stream_index = video_stream->index;
-
-    if (found_audio) {
-        AVStream* audio_stream = avformat_new_stream(impl_->format, nullptr);
-        if (audio_stream == nullptr) {
+    auto connected = impl_->Connect();  // 首次建立 RTSP 会话的结果。
+    if (!connected) {
+        // required 输出保持启动即失败；可选输出开启重连后先进入等待状态，由 Write 触发重连。
+        if (config.required || !impl_->reconnect_enabled) {
             impl_->Release();
-            return Result<void>::Failure(
-                RtspError("create_stream", AVERROR(ENOMEM), "cannot create RTSP audio stream"));
+            return connected;
         }
-        configured = ConfigureStream(*audio_stream, impl_->audio_info);
-        if (!configured) {
-            impl_->Release();
-            return configured;
-        }
-        impl_->audio_stream_index = audio_stream->index;
-    }
-
-    // RTSP muxer 自行管理网络连接（AVFMT_NOFILE），这里不再打开文件或 URL。
-
-    // TCP 传输更可靠，适合嵌入式场景；RTSP muxer 只支持向服务器推流（ANNOUNCE），
-    // FFmpeg 的 listen 选项仅存在于 demuxer，不能用于输出侧。
-    AVDictionary* options = nullptr;
-    av_dict_set(&options, "rtsp_transport", "tcp", 0);
-    const int header = avformat_write_header(impl_->format, &options);
-    av_dict_free(&options);
-    if (header < 0) {
-        impl_->Release();
-        return Result<void>::Failure(
-            RtspError("write_header", header, "cannot write RTSP stream header"));
+        impl_->open = true;
+        impl_->flushed = false;
+        impl_->ScheduleNextReconnect();
+        Logger::Instance().Log(LogLevel::kWarn, "ffmpeg_rtsp_sink", "rtsp_waiting_for_server",
+                               "RTSP server is unreachable; reconnecting on write",
+                               {{"url", impl_->url},
+                                {"retry_interval_ms",
+                                 std::to_string(impl_->reconnect_interval_ms)}});
+        return Result<void>::Success();
     }
     impl_->open = true;
     impl_->flushed = false;
@@ -201,6 +255,25 @@ Result<void> FfmpegRtspSink::Write(const EncodedPacket& packet) {
     auto validation = ValidatePacket(packet);
     if (!validation) {
         return validation;
+    }
+
+    if (!impl_->connected) {
+        if (!impl_->ReconnectDue()) {
+            // 重连未到期：本包按丢包处理，返回可重试错误且不阻塞后续包。
+            return Result<void>::Failure(
+                RtspError("write", AVERROR(ECONNRESET),
+                          "RTSP session is disconnected; packet dropped before next reconnect",
+                          true));
+        }
+        auto reconnected = impl_->Connect();  // 本次重连尝试结果。
+        if (!reconnected) {
+            impl_->ScheduleNextReconnect();
+            return Result<void>::Failure(
+                RtspError("reconnect", reconnected.error().native_code,
+                          "RTSP reconnect failed: " + reconnected.error().message, true));
+        }
+        Logger::Instance().Log(LogLevel::kInfo, "ffmpeg_rtsp_sink", "rtsp_reconnected",
+                               "RTSP session re-established", {{"url", impl_->url}});
     }
 
     const EncodedStreamInfo& info =
@@ -246,8 +319,18 @@ Result<void> FfmpegRtspSink::Write(const EncodedPacket& packet) {
     const int written = av_interleaved_write_frame(impl_->format, mux_packet);
     av_packet_free(&mux_packet);
     if (written < 0) {
-        return Result<void>::Failure(
-            RtspError("write_packet", written, "cannot interleave packet into RTSP stream"));
+        // 连接级失败：结束当前会话；开启重连时由后续 Write 按间隔重建。
+        const bool retryable = impl_->reconnect_enabled;
+        impl_->ReleaseFormat();
+        if (retryable) {
+            impl_->ScheduleNextReconnect();
+            Logger::Instance().Log(LogLevel::kWarn, "ffmpeg_rtsp_sink", "rtsp_connection_lost",
+                                   "RTSP session write failed; reconnect scheduled",
+                                   {{"url", impl_->url}, {"native_code", std::to_string(written)}});
+        }
+        return Result<void>::Failure(RtspError("write_packet", written,
+                                               "cannot interleave packet into RTSP stream",
+                                               retryable));
     }
     return Result<void>::Success();
 }
@@ -258,8 +341,14 @@ Result<void> FfmpegRtspSink::Flush() {
         return Result<void>::Failure(
             RtspError("flush", AVERROR(EINVAL), "RTSP sink cannot be finalized"));
     }
+    if (!impl_->connected) {
+        // 断连期间没有可收尾的会话，直接结束写入。
+        impl_->flushed = true;
+        return Result<void>::Success();
+    }
     const int trailer = av_write_trailer(impl_->format);
     if (trailer < 0) {
+        impl_->ReleaseFormat();
         return Result<void>::Failure(
             RtspError("write_trailer", trailer, "cannot finalize RTSP stream"));
     }

@@ -247,5 +247,35 @@ TEST(ConfigTest, RtspOutputRequiresRealH264Encoder) {
     EXPECT_EQ(parsed.error().operation, "outputs[0].type");
 }
 
+// RTSP 输出接受重连间隔配置；非 FFmpeg 构建在编码器校验处先失败。
+TEST(ConfigTest, ReconnectIntervalIsAcceptedForRtspOutput) {
+    auto parsed = ConfigLoader::Parse(
+        R"({"video_encoder":{"backend":"ffmpeg","codec_name":"libx264","bitrate_bps":2000000,"gop_size":30},"audio_encoder":{"backend":"ffmpeg","codec_name":"aac","bitrate_bps":128000},"outputs":[{"type":"rtsp","path":"rtsp://127.0.0.1:8554/live","reconnect_interval_ms":1000}]})");
+
+#if RKAV_WITH_FFMPEG
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(parsed.value().outputs.front().reconnect_interval_ms, 1000);
+#else
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "video_encoder.backend");
+#endif
+}
+
+// 超出 [0, 60000] 范围的重连间隔必须被拒绝。
+TEST(ConfigTest, RejectsOutOfRangeReconnectInterval) {
+    auto parsed =
+        ConfigLoader::Parse(R"({"outputs":[{"type":"null","reconnect_interval_ms":-1}]})");
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "outputs[0].reconnect_interval_ms");
+}
+
+// 只有 RTSP 输出允许携带重连间隔，避免其他输出静默忽略该字段。
+TEST(ConfigTest, RejectsReconnectIntervalOnNonRtspOutput) {
+    auto parsed =
+        ConfigLoader::Parse(R"({"outputs":[{"type":"null","reconnect_interval_ms":1000}]})");
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "outputs[0].reconnect_interval_ms");
+}
+
 }  // namespace
 }  // namespace rkav
