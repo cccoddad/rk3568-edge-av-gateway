@@ -113,6 +113,10 @@ struct OutputConfig {
     std::string path;                // JSONL 等文件输出路径。
     // RTSP 断连自动重连的最小间隔（毫秒）；0 表示关闭重连，写入失败即隔离。
     int reconnect_interval_ms{0};
+    // RTSP 传输协议："tcp"（默认，可靠）或 "udp"（低延迟）。
+    std::string rtsp_transport{"tcp"};
+    // RTSP 建连和单次网络 I/O 的超时守卫（毫秒）；0 表示不启用，交给 FFmpeg 默认值。
+    int rtsp_timeout_ms{5000};
     std::size_t queue_capacity{16};  // 此输出独立队列的包数量上限。
     OverflowPolicy overflow_policy{OverflowPolicy::kDropOldest};  // 满队列处理方式。
     int push_timeout_ms{0};  // block_producer 最长等待时间；0 表示不等待。

@@ -277,5 +277,50 @@ TEST(ConfigTest, RejectsReconnectIntervalOnNonRtspOutput) {
     EXPECT_EQ(parsed.error().operation, "outputs[0].reconnect_interval_ms");
 }
 
+// RTSP 输出接受传输协议和超时覆盖；非 FFmpeg 构建在编码器校验处先失败。
+TEST(ConfigTest, RtspTransportAndTimeoutAreAcceptedForRtspOutput) {
+    auto parsed = ConfigLoader::Parse(
+        R"({"video_encoder":{"backend":"ffmpeg","codec_name":"libx264","bitrate_bps":2000000,"gop_size":30},"audio_encoder":{"backend":"ffmpeg","codec_name":"aac","bitrate_bps":128000},"outputs":[{"type":"rtsp","path":"rtsp://127.0.0.1:8554/live","rtsp_transport":"udp","rtsp_timeout_ms":3000}]})");
+
+#if RKAV_WITH_FFMPEG
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(parsed.value().outputs.front().rtsp_transport, "udp");
+    EXPECT_EQ(parsed.value().outputs.front().rtsp_timeout_ms, 3000);
+#else
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "video_encoder.backend");
+#endif
+}
+
+// 传输协议只允许 tcp 或 udp。
+TEST(ConfigTest, RejectsUnknownRtspTransportValue) {
+    auto parsed =
+        ConfigLoader::Parse(R"({"outputs":[{"type":"null","rtsp_transport":"sctp"}]})");
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "outputs[0].rtsp_transport");
+}
+
+// 非 RTSP 输出不允许覆盖传输协议。
+TEST(ConfigTest, RejectsTransportOverrideOnNonRtspOutput) {
+    auto parsed = ConfigLoader::Parse(R"({"outputs":[{"type":"null","rtsp_transport":"udp"}]})");
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "outputs[0].rtsp_transport");
+}
+
+// 超出 [0, 60000] 范围的 RTSP 超时必须被拒绝。
+TEST(ConfigTest, RejectsOutOfRangeRtspTimeout) {
+    auto parsed =
+        ConfigLoader::Parse(R"({"outputs":[{"type":"null","rtsp_timeout_ms":70000}]})");
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "outputs[0].rtsp_timeout_ms");
+}
+
+// 非 RTSP 输出不允许覆盖超时，默认值 5000 保持合法。
+TEST(ConfigTest, RejectsTimeoutOverrideOnNonRtspOutput) {
+    auto parsed = ConfigLoader::Parse(R"({"outputs":[{"type":"null","rtsp_timeout_ms":3000}]})");
+    ASSERT_FALSE(parsed);
+    EXPECT_EQ(parsed.error().operation, "outputs[0].rtsp_timeout_ms");
+}
+
 }  // namespace
 }  // namespace rkav

@@ -269,8 +269,8 @@ Result<void> ParseOutputs(const Json& json, std::vector<OutputConfig>& outputs) 
         auto keys = RejectUnknownKeys(
             item, path,
             {"type", "enabled", "required", "validate_timestamps", "path",
-             "reconnect_interval_ms", "queue_capacity", "overflow_policy", "push_timeout_ms",
-             "write_delay_ms", "fail_after_packets"});
+             "reconnect_interval_ms", "rtsp_transport", "rtsp_timeout_ms", "queue_capacity",
+             "overflow_policy", "push_timeout_ms", "write_delay_ms", "fail_after_packets"});
         if (!keys) {
             return keys;
         }
@@ -282,6 +282,8 @@ Result<void> ParseOutputs(const Json& json, std::vector<OutputConfig>& outputs) 
         output.path = item.value("path", output.path);
         output.reconnect_interval_ms =
             item.value("reconnect_interval_ms", output.reconnect_interval_ms);
+        output.rtsp_transport = item.value("rtsp_transport", output.rtsp_transport);
+        output.rtsp_timeout_ms = item.value("rtsp_timeout_ms", output.rtsp_timeout_ms);
         output.queue_capacity = item.value("queue_capacity", output.queue_capacity);
         output.push_timeout_ms = item.value("push_timeout_ms", output.push_timeout_ms);
         output.write_delay_ms = item.value("write_delay_ms", output.write_delay_ms);
@@ -736,6 +738,22 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
         if (output.type != "rtsp" && output.reconnect_interval_ms != 0) {
             return fail("outputs[" + std::to_string(index) + "].reconnect_interval_ms",
                         "only RTSP outputs accept a reconnect interval");
+        }
+        if (output.rtsp_transport != "tcp" && output.rtsp_transport != "udp") {
+            return fail("outputs[" + std::to_string(index) + "].rtsp_transport",
+                        "expected 'tcp' or 'udp'");
+        }
+        if (output.type != "rtsp" && output.rtsp_transport != "tcp") {
+            return fail("outputs[" + std::to_string(index) + "].rtsp_transport",
+                        "only RTSP outputs accept a transport override");
+        }
+        if (output.rtsp_timeout_ms < 0 || output.rtsp_timeout_ms > 60'000) {
+            return fail("outputs[" + std::to_string(index) + "].rtsp_timeout_ms",
+                        "expected value in range [0, 60000]");
+        }
+        if (output.type != "rtsp" && output.rtsp_timeout_ms != 5000) {
+            return fail("outputs[" + std::to_string(index) + "].rtsp_timeout_ms",
+                        "only RTSP outputs accept a timeout override");
         }
         if (output.queue_capacity == 0U || output.queue_capacity > 65'536U) {
             return fail("outputs[" + std::to_string(index) + "].queue_capacity",

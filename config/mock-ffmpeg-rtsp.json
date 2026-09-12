@@ -55,6 +55,8 @@
       "validate_timestamps": true,
       "path": "rtsp://127.0.0.1:8554/live",
       "reconnect_interval_ms": 1000,
+      "rtsp_transport": "tcp",
+      "rtsp_timeout_ms": 5000,
       "queue_capacity": 64,
       "overflow_policy": "drop_oldest",
       "push_timeout_ms": 0,
