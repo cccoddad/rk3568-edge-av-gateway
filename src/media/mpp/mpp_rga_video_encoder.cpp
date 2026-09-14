@@ -96,6 +96,7 @@ struct MppRgaVideoEncoder::Impl {
         decltype(&mpp_buffer_get_with_tag) buffer_get{nullptr};
         decltype(&mpp_buffer_put_with_caller) buffer_put{nullptr};
         decltype(&mpp_buffer_get_ptr_with_caller) buffer_ptr{nullptr};
+        decltype(&mpp_buffer_get_fd_with_caller) buffer_fd{nullptr};
         decltype(&mpp_frame_init) frame_init{nullptr};
         decltype(&mpp_frame_deinit) frame_deinit{nullptr};
         decltype(&mpp_frame_set_width) frame_set_width{nullptr};
@@ -112,7 +113,7 @@ struct MppRgaVideoEncoder::Impl {
         decltype(&mpp_packet_get_pts) packet_get_pts{nullptr};
         decltype(&mpp_packet_get_dts) packet_get_dts{nullptr};
         decltype(&mpp_packet_get_eos) packet_get_eos{nullptr};
-        decltype(&wrapbuffer_virtualaddr_t) wrap_virtual_address{nullptr};
+        decltype(&wrapbuffer_fd_t) wrap_file_descriptor{nullptr};
         decltype(&imcvtcolor_t) convert_color{nullptr};
 
         Result<void> Open() {
@@ -141,6 +142,7 @@ struct MppRgaVideoEncoder::Impl {
             RKAV_LOAD_MPP(buffer_get, "mpp_buffer_get_with_tag");
             RKAV_LOAD_MPP(buffer_put, "mpp_buffer_put_with_caller");
             RKAV_LOAD_MPP(buffer_ptr, "mpp_buffer_get_ptr_with_caller");
+            RKAV_LOAD_MPP(buffer_fd, "mpp_buffer_get_fd_with_caller");
             RKAV_LOAD_MPP(frame_init, "mpp_frame_init");
             RKAV_LOAD_MPP(frame_deinit, "mpp_frame_deinit");
             RKAV_LOAD_MPP(frame_set_width, "mpp_frame_set_width");
@@ -163,7 +165,7 @@ struct MppRgaVideoEncoder::Impl {
         Close(); \
         return Result<void>::Failure(MppRgaError("load_rga_symbol", 0, "missing RGA symbol: " symbol)); \
     }
-            RKAV_LOAD_RGA(wrap_virtual_address, "wrapbuffer_virtualaddr_t");
+            RKAV_LOAD_RGA(wrap_file_descriptor, "wrapbuffer_fd_t");
             RKAV_LOAD_RGA(convert_color, "imcvtcolor_t");
 #undef RKAV_LOAD_RGA
             return Result<void>::Success();
@@ -188,6 +190,8 @@ struct MppRgaVideoEncoder::Impl {
     MppEncCfg config{nullptr};
     MppBufferGroup buffer_group{nullptr};
     MppBuffer nv12_buffer{nullptr};
+    MppBuffer rgb_buffer{nullptr};
+    int rgb_stride{0};
     std::map<std::int64_t, std::uint64_t> sequences_by_pts;
     int source_rga_format{RK_FORMAT_UNKNOWN};
     int width{0};
@@ -209,6 +213,10 @@ struct MppRgaVideoEncoder::Impl {
         if (nv12_buffer != nullptr) {
             symbols.buffer_put(nv12_buffer, __func__);
             nv12_buffer = nullptr;
+        }
+        if (rgb_buffer != nullptr) {
+            symbols.buffer_put(rgb_buffer, __func__);
+            rgb_buffer = nullptr;
         }
         if (buffer_group != nullptr) {
             symbols.buffer_group_put(buffer_group);
@@ -275,11 +283,10 @@ Result<EncodedStreamInfo> MppRgaVideoEncoder::Open(const VideoEncoderConfig& con
         return Result<EncodedStreamInfo>::Failure(
             MppRgaError("initialize_context", result, "cannot initialize MPP H.264 encoder"));
     }
+    // 输入超时保持默认阻塞：把 MPP_SET_INPUT_TIMEOUT 设为 0 会让 put_frame 走异步队列，
+    // 而异步编码线程只在初始化时输入就是非阻塞才会启动，两者不一致会导致提交被拒。
     RK_S64 timeout_ms = 0;
-    result = impl_->api->control(impl_->context, MPP_SET_INPUT_TIMEOUT, &timeout_ms);
-    if (result == MPP_OK) {
-        result = impl_->api->control(impl_->context, MPP_SET_OUTPUT_TIMEOUT, &timeout_ms);
-    }
+    result = impl_->api->control(impl_->context, MPP_SET_OUTPUT_TIMEOUT, &timeout_ms);
     if (result != MPP_OK) {
         impl_->Close();
         return Result<EncodedStreamInfo>::Failure(
@@ -362,16 +369,49 @@ Result<std::vector<EncodedPacket>> MppRgaVideoEncoder::Encode(const VideoFrame& 
         return Result<std::vector<EncodedPacket>>::Failure(
             MppRgaError("encode", 0, "video frame does not match negotiated MPP input"));
     }
-    void* destination = impl_->symbols.buffer_ptr(impl_->nv12_buffer, __func__);
-    if (destination == nullptr) {
-        return Result<std::vector<EncodedPacket>>::Failure(
-            MppRgaError("convert", 0, "MPP NV12 buffer is not mapped"));
+    // 板端 RK356X_Linux_V1.3.2 的 librga 1.3.2 只可靠支持 dma-buf fd：堆虚拟地址会在
+    // rga2_mmu 映射 src0 时失败（P122）。因此源 RGB/BGR 帧先拷入 MPP 缓冲区，再用 fd 包装。
+    const std::size_t rgb_bytes =
+        static_cast<std::size_t>(frame.stride) * static_cast<std::size_t>(frame.height);
+    if (impl_->rgb_buffer == nullptr || impl_->rgb_stride < frame.stride) {
+        if (impl_->rgb_buffer != nullptr) {
+            impl_->symbols.buffer_put(impl_->rgb_buffer, __func__);
+            impl_->rgb_buffer = nullptr;
+        }
+        const MPP_RET allocate = impl_->symbols.buffer_get(impl_->buffer_group, &impl_->rgb_buffer,
+                                                            rgb_bytes, "rkav", __func__);
+        if (allocate != MPP_OK || impl_->rgb_buffer == nullptr ||
+            impl_->symbols.buffer_ptr(impl_->rgb_buffer, __func__) == nullptr) {
+            impl_->rgb_buffer = nullptr;
+            return Result<std::vector<EncodedPacket>>::Failure(
+                MppRgaError("allocate_rgb_buffer", allocate, "cannot allocate MPP RGB buffer"));
+        }
+        impl_->rgb_stride = frame.stride;
     }
-    const rga_buffer_t source = impl_->symbols.wrap_virtual_address(
-        frame.buffer->data(), frame.width, frame.height, frame.stride, frame.height,
+    void* rgb_destination = impl_->symbols.buffer_ptr(impl_->rgb_buffer, __func__);
+    if (rgb_destination == nullptr) {
+        return Result<std::vector<EncodedPacket>>::Failure(
+            MppRgaError("convert", 0, "MPP RGB buffer is not mapped"));
+    }
+    std::memcpy(rgb_destination, frame.buffer->data(), rgb_bytes);
+    const int source_fd = impl_->symbols.buffer_fd(impl_->rgb_buffer, __func__);
+    const int target_fd = impl_->symbols.buffer_fd(impl_->nv12_buffer, __func__);
+    if (source_fd < 0 || target_fd < 0) {
+        return Result<std::vector<EncodedPacket>>::Failure(
+            MppRgaError("convert", 0, "MPP buffers do not expose a dma-buf fd"));
+    }
+    // librga 的 wstride 以像素为单位（Rockchip RGA 开发指南），RGB/BGR 每像素 3 字节；
+    // 传字节 stride 会让 RGA 按 3 倍宽度访问并触发 MMU 故障（P122 复测证据）。
+    if ((frame.stride % 3) != 0) {
+        return Result<std::vector<EncodedPacket>>::Failure(
+            MppRgaError("convert", 0, "RGB/BGR stride is not a multiple of 3"));
+    }
+    const int source_wstride = frame.stride / 3;
+    const rga_buffer_t source = impl_->symbols.wrap_file_descriptor(
+        source_fd, frame.width, frame.height, source_wstride, frame.height,
         impl_->source_rga_format);
-    const rga_buffer_t target = impl_->symbols.wrap_virtual_address(
-        destination, impl_->width, impl_->height, impl_->stride, impl_->height,
+    const rga_buffer_t target = impl_->symbols.wrap_file_descriptor(
+        target_fd, impl_->width, impl_->height, impl_->stride, impl_->height,
         RK_FORMAT_YCbCr_420_SP);
     const IM_STATUS conversion = impl_->symbols.convert_color(
         source, target, impl_->source_rga_format, RK_FORMAT_YCbCr_420_SP,
@@ -474,10 +514,16 @@ Result<std::vector<EncodedPacket>> MppRgaVideoEncoder::Flush() {
             return Result<std::vector<EncodedPacket>>::Failure(
                 MppRgaError("flush", result, "MPP failed while draining H.264 packets"));
         }
+        // MPP 用带 EOS 标志的空包表示排空结束，不能当作异常。
+        const bool packet_eos = impl_->symbols.packet_get_eos(packet) != 0U;
         const std::size_t length = impl_->symbols.packet_get_length(packet);
         void* position = impl_->symbols.packet_get_pos(packet);
         if (length == 0U || position == nullptr) {
             impl_->symbols.packet_deinit(&packet);
+            if (packet_eos) {
+                saw_eos = true;
+                break;
+            }
             return Result<std::vector<EncodedPacket>>::Failure(
                 MppRgaError("flush", 0, "MPP returned an empty packet while draining"));
         }
@@ -494,7 +540,7 @@ Result<std::vector<EncodedPacket>> MppRgaVideoEncoder::Flush() {
         encoded.key_frame = ContainsH264IdrNal(*payload);
         encoded.codec = Codec::kH264;
         encoded.buffer = std::move(payload);
-        saw_eos = impl_->symbols.packet_get_eos(packet) != 0U;
+        saw_eos = packet_eos;
         impl_->symbols.packet_deinit(&packet);
         output.push_back(std::move(encoded));
     }
