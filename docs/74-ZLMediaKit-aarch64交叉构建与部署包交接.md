@@ -75,7 +75,21 @@ ZLMediaKit 已按 **与 PC 验证完全相同的 commit `4b07053`** 交叉编译
 - **静态与动态依赖**：libsrtp 静态进库，OpenSSL 动态随包；`LD_LIBRARY_PATH` 优先加载包内库。
 - **持久化依赖前缀**：把容器内 `/opt/zlm-deps` 绑定到宿主目录，构建重试时复用，避免重复编译。
 
-## 8. 相关文档
+## 8. 2026-09-14 板端部署记录（阶段 2 部署执行）
+
+- **部署位置**：`/opt/rkav/zlm`（`/userdata/rkav` 保留包副本），板端 glibc 2.35 运行正常；
+- **端口**：`conf/config.ini` 改为 `[rtsp] port=8554`、`[http] port=8080`（其余保留默认）；
+- **启动方式**：`LD_LIBRARY_PATH=$PWD/lib ./bin/MediaServer -d -c conf/config.ini -l 1`（守护模式）；
+  未纳入 init/systemd 托管，重启后需手工拉起（见 P124）；
+- **API secret**：首次启动自动把默认 secret 改为 `y4YVy5XjFCAffNR2h14glk20XxexRw8u`
+  （与阶段 1 Docker 行为一致，见 P120），管理接口需用新值；
+- **实测**：网关以 `rtsp://127.0.0.1:8554/live/camera` 推流（MPP H.264 + FFmpeg AAC），ZLM 记录
+  `originTypeStr=rtsp_push`，VM 从 `rtsp://192.168.50.2:8554/live/camera` 拉流成功；
+  杀/重启 ZLM 后网关约 1.5 秒自动重连。完整证据见
+  [板端 RTSP 推流与断连恢复及 FFmpeg 交叉构建交接](77-板端RTSP推流与断连恢复及FFmpeg交叉构建交接.md)；
+- **待做验收**：板端多客户端并发、FLV/RTMP/HLS 实测、WebRTC 浏览器播放、端到端延迟测量与资源占用。
+
+## 9. 相关文档
 
 - [项目当前开发状态](19-项目当前开发状态.md)
 - [ZLMediaKit 流媒体服务层升级方案](72-ZLMediaKit流媒体服务层升级方案.md)

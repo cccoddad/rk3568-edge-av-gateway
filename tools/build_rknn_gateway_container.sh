@@ -10,6 +10,7 @@ rkav_project_root=$(CDPATH= cd -- "$rkav_script_dir/.." && pwd)
 rkav_container_engine=${RKAV_CONTAINER_ENGINE:-docker}
 rkav_image=${RKAV_RKNN_BUILD_IMAGE:-rkav/aarch64-rknn-build:ubuntu22.04}
 rkav_enable_mpp_rga=${RKAV_ENABLE_MPP_RGA:-0}
+rkav_dockerfile=${RKAV_RKNN_BUILD_DOCKERFILE:-"$rkav_project_root/tools/docker/rknn-gateway-build.Dockerfile"}
 
 if [ -z "${RKNN_SDK_ROOT:-}" ]; then
     echo "RKNN_SDK_ROOT must point to runtime/RK356X/Linux/librknn_api" >&2
@@ -61,7 +62,7 @@ rkav_uid=$(id -u)
 rkav_gid=$(id -g)
 
 "$rkav_container_engine" build \
-    --file "$rkav_project_root/tools/docker/rknn-gateway-build.Dockerfile" \
+    --file "$rkav_dockerfile" \
     --tag "$rkav_image" \
     "$rkav_project_root/tools/docker"
 
@@ -96,6 +97,15 @@ if [ "$rkav_enable_mpp_rga" = 1 ]; then
         --env RKAV_RKNN_OUTPUT_DIR=/workspace/out/aarch64-rknn-mpp-rga-gateway-ubuntu22.04 \
         --volume "$RKAV_MPP_HEADERS_ROOT:/opt/rockchip-mpp:ro" \
         --volume "$RKAV_RGA_HEADERS_ROOT:/opt/rockchip-rga:ro"
+fi
+if [ -n "${RKAV_FFMPEG_PREFIX:-}" ]; then
+    if [ ! -f "$RKAV_FFMPEG_PREFIX/lib/pkgconfig/libavformat.pc" ]; then
+        echo "FFmpeg prefix is incomplete: $RKAV_FFMPEG_PREFIX" >&2
+        exit 2
+    fi
+    set -- "$@" \
+        --env RKAV_FFMPEG_PREFIX=/opt/ffmpeg \
+        --volume "$RKAV_FFMPEG_PREFIX:/opt/ffmpeg:ro"
 fi
 set -- "$@" \
     --workdir /workspace \

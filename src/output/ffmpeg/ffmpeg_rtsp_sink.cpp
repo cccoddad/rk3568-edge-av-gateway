@@ -353,6 +353,10 @@ Result<void> FfmpegRtspSink::Write(const EncodedPacket& packet) {
                                "RTSP session re-established", {{"url", impl_->url}});
     }
 
+    if (packet.kind == StreamKind::kAudio && !impl_->has_audio) {
+        // 输出未登记音频流（例如音频编码仍是 checksum）时忽略音频包，只推送视频。
+        return Result<void>::Success();
+    }
     const EncodedStreamInfo& info =
         packet.kind == StreamKind::kVideo ? impl_->video_info : impl_->audio_info;
     if (packet.codec != info.codec) {

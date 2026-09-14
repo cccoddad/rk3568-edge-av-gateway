@@ -72,6 +72,17 @@ if [ "$rkav_enable_mpp_rga" = 1 ]; then
         "-DRKAV_MPP_HEADERS_ROOT=$RKAV_MPP_HEADERS_ROOT" \
         "-DRKAV_RGA_HEADERS_ROOT=$RKAV_RGA_HEADERS_ROOT"
 fi
+if [ -n "${RKAV_FFMPEG_PREFIX:-}" ]; then
+    if [ ! -f "$RKAV_FFMPEG_PREFIX/lib/pkgconfig/libavformat.pc" ]; then
+        echo "FFmpeg prefix is incomplete: $RKAV_FFMPEG_PREFIX" >&2
+        exit 2
+    fi
+    export PKG_CONFIG_PATH="$RKAV_FFMPEG_PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+    export PKG_CONFIG_ARGN=--static
+    set -- "$@" \
+        -DRKAV_WITH_FFMPEG=ON \
+        "-DCMAKE_EXE_LINKER_FLAGS=-L$RKAV_FFMPEG_PREFIX/lib"
+fi
 "$@"
 cmake --build "$rkav_build_dir" -j "${RKAV_BUILD_JOBS:-4}"
 
