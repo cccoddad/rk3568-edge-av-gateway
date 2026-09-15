@@ -1,9 +1,8 @@
 # GEC V11 5.10 压缩启动候选与 U-Boot 格式核验交接
 
-更新日期：2026-09-14
-状态：**压缩启动候选已构建并通过离线门禁；U-Boot 格式兼容性已由真实板端只读证据确认；旧 boot
-分区已备份；刷写等待用户明确确认（本轮未写盘、未重启）**。本文件是 GEC V11 / LubanCat 5.10
-路线的最新交接。
+更新日期：2026-09-14（含 2026-09-15 追加：首次真机启动成功并已回滚）
+状态：**已完成——压缩候选经用户确认刷入 boot 分区，5.10.209 在 GEC 板真机启动成功，证据固化后已回滚 4.19**。
+本文件是 GEC V11 / LubanCat 5.10 路线的最新交接。
 
 ## 1. 结论
 
@@ -88,9 +87,45 @@
 
 ## 7. 下一步
 
-1. 取得用户对“写入 p3 + 重启”的明确确认，并连接串口（COM5）；
-2. 执行写入与首次启动观察，保留串口与 dmesg 证据；
-3. 启动成功后按 docs/64 第 5 条逐项核验驱动/用户态兼容性，再决定是否纳入主线。
+1. ~~取得用户对“写入 p3 + 重启”的明确确认，并连接串口~~（已完成，见 §11）；
+2. 按 docs/64 第 5 条逐项核验驱动/用户态兼容性，再决定是否纳入主线。
+
+## 11. 2026-09-15 追加：首次真机启动成功并已回滚
+
+### 11.1 执行过程（经用户逐步确认）
+
+1. **尝试不写盘的验证路径均被堵死**（均有证据）：
+   - 串口停 U-Boot：`bootdelay=0` 且 Ctrl+C 零延时检查未生效（多轮实测无法中断）；
+   - misc BCB `boot-fastboot`（0 与 16KB 偏移均试）：vendor U-Boot 2017.09 的
+     `rockchip_get_boot_mode()` 只认 `boot-recovery`，`boot-fastboot` 仅 Android 流程使用；
+   - 启动模式寄存器 `0xFDC20200` 写 `0x5242C309`（fastboot）/`0x5242C301`（loader）：
+     寄存器被读走并清回 `0x5242C300`，但 fastboot/loader 均未触发（无对应 USB 设备）；
+2. 用户确认后**刷写 p3**：`dd if=zboot.img of=/dev/block/by-name/boot bs=1M conv=fsync`
+   （16,412,160 字节），读回 SHA-256 = 候选哈希 `d133fd00…` 完全一致；
+3. **重启后 5.10.209 真机启动成功**（证据 `/userdata/rkav/gec-510-firstboot-20260914/`，
+   Windows 副本 `D:\share\gec-510-firstboot-20260914\`）：
+   - `Linux RK356X 5.10.209 #8 SMP Thu Sep 3 16:40:37 CST 2026 aarch64`，cmdline 与出厂一致
+     （`console=ttyFIQ0 root=PARTUUID=614e0000-0000`）；
+   - **eth0 UP 1Gbps**（GMAC1/RTL8211F，IP 192.168.50.2）；
+   - rootfs/oem/userdata 全部挂载；USB gadget（adb）正常；
+   - **ALSA 4 卡枚举**（RK809/HDMI/SPDIF/UGREEN UAC）、**V4L2 节点 video0-11**（含 UVC 摄像头）；
+   - 已知差异：MIPI 面板 probe `-517`（deferred，屏不亮/无动画的直接原因）、PCIe3 PHY init
+     失败、spi-nand/serial/rk817-battery probe 失败、旧 rootfs 的 4.19 模块
+     （goodix/8723ds）版本不匹配无法加载；
+4. 证据固化后**回滚**：32 MiB 备份写回 p3（读回 SHA-256 `26a5758c…` 与备份一致），
+   重启确认 `4.19.232` 恢复（uptime 正常、网络/adb 正常）。
+
+### 11.2 结论与边界
+
+- **首次真机启动目标达成**：U-Boot 接受 FIT+lz4，5.10 内核 + v3 候选 DTB + 旧 4.19 rootfs
+  可以跑到用户态，网口/存储/USB/音频输入枚举正常；
+- **未验证**（按 docs/64 第 5 条继续）：真实 OSD、MPP/RGA/RKNN 用户态兼容性、WiFi/触摸/面板、
+  NPU 驱动（5.10 BSP 内核不含 0.8.2 驱动栈的完整验证）、2/12 小时长稳；
+- 刷写/回滚全程 `dd` 写 p3 单分区，uboot/recovery/rootfs 未动；备份三处（板端/Windows/VM）哈希一致。
+
+### 11.3 名词补充
+
+- **首次真机启动验证**：只证明内核+DTB+rootfs 挂载+基础外设枚举，不证明任何媒体/推理链路可用。
 
 ## 8. 相关文档
 
