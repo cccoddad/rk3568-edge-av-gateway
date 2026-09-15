@@ -127,6 +127,47 @@
 
 - **首次真机启动验证**：只证明内核+DTB+rootfs 挂载+基础外设枚举，不证明任何媒体/推理链路可用。
 
+## 12. 2026-09-15 追加：5.10 驱动模块编译与 A 方案验证
+
+### 12.1 模块编译（主机侧，隔离 SDK 内核树）
+
+针对 5.10 首启 dmesg 的两个 version-magic 报错，在隔离 kernel worktree 上用 SDK 自带
+`gcc-arm-10.3-2021.07`（与该内核构建器一致）编译出两个 5.10 模块：
+
+| 模块 | 来源 | 大小 | SHA-256 | vermagic |
+|---|---|---|---|---|
+| `RTL8723DS.ko`（WiFi） | `external/rkwifibt/drivers/rtl8723ds`（RTW v5.13.5-34） | 4,207,736 | `dd1379e9…52b7bd` | `5.10.209 SMP mod_unload aarch64` |
+| `goodix.ko`（触摸） | 内核树 `CONFIG_TOUCHSCREEN_GOODIX=m` | 528,240 | `ebd6530e…e85935` | 同上 |
+
+- 构建要点：Realtek 老式 Makefile 内含各平台硬编码（`ARCH:=`/`KSRC:=`），必须用 **make 命令行变量**
+  覆盖（`ARCH=arm64 CROSS_COMPILE=... KSRC=<5.10 tree>`），并把 SDK host-shims（`python`、`nproc`）
+  加入 PATH；goodix 在内核树打开 `CONFIG_TOUCHSCREEN_GOODIX=m` 后需 `make prepare` 再 `make M=`。
+- 产物三处留档：VM `evidence/modules-510-20260915`、Windows `D:\share\gec-modules-510-20260915`、
+  板端 `/userdata/rkav/gec-modules-510/`（哈希一致）。
+
+### 12.2 二次刷入与 insmod 验证（用户确认后执行）
+
+- 重新刷入 zboot.img（读回哈希一致）→ 重启。第二次启动比首次慢（约 1-2 分钟），
+  探测窗口内网络/adb 未就绪造成"未启动"误判；用户按复位后正常进入 5.10 并出现 shell；
+- 5.10 下 `insmod RTL8723DS.ko` → OK（`module init ret=0`，RTW 正常注册）；
+  `insmod goodix.ko` → OK（lsmod 可见）；
+- **功能层未闭环**：`wlan0` 未出现（无 rfkill/无 WiFi 上电路径）、goodix 未绑定 I2C1@0x14——
+  **根因都是 v3 候选 DTS（56 行）刻意排除了 display/Wi-Fi/touch**（其内含的
+  `rk3568-evb1-ddr4-v10-linux.dts` 不含出厂板级节点），需要把出厂 4.19 DTS 的
+  WLAN_RFKILL/regulator、触摸（goodix,gt911@I2C1）、DSI0 面板等节点移植进候选 DTS（docs/34-35
+  已列为"明确板级候选"）后重建 DTB/FIT 再刷；
+- 验证后已用 32 MiB 备份回滚 4.19（读回一致，`4.19.232` 恢复，板端最终证据
+  `gec-modules-test-20260915` 2/2 OK）。
+
+### 12.3 下一步（更新）
+
+1. **B 方案 DTS 移植**：把出厂 DTS 的 WLAN（wifi_chip_type=rtl8723ds/rfkill/SDIO）、触摸
+   （I2C1@0x14 goodix,gt911）、DSI0 面板（panel@0 + init-sequence）、backlight/route 节点移植进
+   v3 候选 DTS → 重建 DTB → 重打 FIT（连同模块替换 `/system/lib/modules/`）→ 刷入验证；
+2. 模块部署方式：新 .ko 替换 rootfs `/system/lib/modules/` 同名文件（rootfs 可写、有备份），
+   或改 init 脚本指向 `/userdata`；
+3. 之后才谈媒体/NPU 用户态兼容与网关迁移。
+
 ## 8. 相关文档
 
 - [项目当前开发状态](19-项目当前开发状态.md)
