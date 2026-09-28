@@ -30,7 +30,9 @@ docs/19-项目当前开发状态.md、本文件 docs/83、docs/81（救援纪律
   2/12 小时长稳（板端 SysV 偏差记录）→ systemd 收口。
 - 工具备忘：板端 BusyBox tar 无 -z，解 tar.gz 用 `gunzip -c x.tar.gz | tar x -C dir`；
   adb shell 里 set -e 遇 kill/pidof 空会中断，加 `|| true`；VM 构建在
-  Ubuntu24.04.3（用户开机），vmrun 在 D:\vmware\，容器镜像 rkav/aarch64-rknn-build:ubuntu22.04。
+  Ubuntu24.04.3（用户开机），vmrun 在 D:\vmware\，容器镜像 rkav/aarch64-rknn-build:ubuntu22.04；
+  **git push 直连 GitHub 被重置，须走 clash 代理**：
+  `git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push origin main`。
 
 硬性协作规则（AGENTS.md，每轮不可省略）：操作后四段式汇报（做了什么/证据说明什么/
 成败/名词解释）；每个已验证单元更新 docs/19 与最新交接，P 编号入 docs/06/07，
