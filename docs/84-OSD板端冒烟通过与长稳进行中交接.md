@@ -7,13 +7,13 @@
 >
 > 1. **真实 OSD 板端冒烟已通过**（P133 修复二进制 `/userdata/rkav/osd-flagfix-20260928/rkav-gateway`，
 >    exit=0、overlay 475/475、errors 0、dmesg 零新增、抽帧目视通过），已提交 `01bd8ae` 并推送。
-> 2. **2 小时长稳运行中**：板端证据目录 `osd-soak-20260929-131338`（板端 13:13 起跑，
->    约板端 15:14 / 本地 23:14 结束）。验收命令：
->    `adb -s 192.168.50.2:5555 shell "cat /userdata/rkav/osd-soak-20260929-131338/result.txt"`
->    —— exit_code=0 且 overlay_skipped/errors 均为 0 即通过。
-> 3. **2h 通过后立即启动 12h 长稳**（同配置，CLI 覆盖时长已确认生效）：
->    `adb -s 192.168.50.2:5555 shell "cd /userdata/rkav && RKAV_EXECUTABLE=/userdata/rkav/osd-flagfix-20260928/rkav-gateway nohup sh board_osd_run.sh soak rk3568-rknn-mjpeg-alsa-mpp-osd-longrun.json 43200 > soak-43200-launch.log 2>&1 &"`
->    证据目录会自动生成为 `osd-soak-<时间戳>`；跑约 12 小时后验收（明日中午前后）。
+> 2. **2 小时长稳已通过**（2026-09-29 23:24 验收）：exit=0、overlay 27187/27187、
+>    skipped 0、errors 0、dmesg 前后 SHA 一致；证据 `osd-soak-20260929-131338` +
+>    PC `D:\share\osd-soak-2h-20260929-131338`（已 sha256 校验）。
+> 3. **12 小时长稳运行中**：板端目录 `osd-soak-20260929-155451`（板端 15:54 起跑，
+>    duration 43200，约本地明早 11:54 结束）。验收命令：
+>    `adb -s 192.168.50.2:5555 shell "cat /userdata/rkav/osd-soak-20260929-155451/result.txt"`
+>    —— exit_code=0 且 skipped/errors 均为 0 即通过；通过后拉证据、更新 docs、进入收口拍板。
 >    **过夜期间板卡严禁断电/重启**（RTC 无设备节点，冷启动回 1970；重启=拔全部线含黑色电源线，
 >    本板永久禁插 TF 卡、禁刷 p1/p3）。
 > 4. 12h 通过后进入 **systemd/SysV 收口**（差异清单见 §3：板端 Buildroot 2018.02 **无 systemd**、
@@ -67,13 +67,15 @@
 | dmesg 前后 | SHA 同为 `310b4dae…`（零内核新增） |
 | 目视抽帧 | `frame_10.png`、`frame_60.png`（检测框+置信度+水印+时间戳+帧计数） |
 | 含修复二进制 | `/userdata/rkav/osd-flagfix-20260928/rkav-gateway`（SHA `de833c68…`） |
-| 2h 长稳（进行中） | 板端 `osd-soak-20260929-131338`（本地 21:13 起跑，约 23:14 结束） |
+| 2h 长稳（已通过 2026-09-29） | exit=0、overlay 27187/27187、errors 0、dmesg 零新增；板端 `osd-soak-20260929-131338`、PC `D:\share\osd-soak-2h-20260929-131338`（sha256 校验通过） |
+| 12h 长稳（运行中） | `osd-soak-20260929-155451`（板端 15:54 起，duration 43200，约本地 11:54 结束），validate 通过、zlm=running |
 | 本单元提交 | `01bd8ae`（origin/main 已同步） |
 
 ## 3. 当前状态、收口差异清单与下一步
 
-**进行中**：2 小时长稳（RTSP-only，无大文件落盘；日志估算约 7MB/h，磁盘 2.7G 充足）。
-23:24 本地时间验收 → 通过即启动 12h（见 §0 第 3 条）→ 通过后进入收口。
+**进度**：2 小时长稳已通过（2026-09-29 23:24，exit=0、27187/27187、dmesg 零新增）；
+12 小时长稳运行中（`osd-soak-20260929-155451`，RTSP-only，日志估算 ~72MB，磁盘充足）。
+12h 通过 → 进入收口拍板（docs/85 §4 三个决策点需用户确认）。
 
 **systemd/自启收口差异清单（2026-09-29 板端实测，收口方案需用户确认后执行）**：
 
