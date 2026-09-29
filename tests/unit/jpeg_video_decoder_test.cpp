@@ -59,7 +59,7 @@ std::vector<std::byte> DecodeBase64(std::string_view input) {
 
 VideoFrame CompressedFrame(std::vector<std::byte> bytes, int declared_width = 3,
                            int declared_height = 2, std::uint64_t sequence = 7U,
-                           TimestampUs pts_us = 123'456) {
+                           TimestampUs pts_us = 123'456, bool inference_submitted = false) {
     return VideoFrame{sequence,
                       pts_us,
                       declared_width,
@@ -67,7 +67,8 @@ VideoFrame CompressedFrame(std::vector<std::byte> bytes, int declared_width = 3,
                       0,
                       PixelFormat::kMjpeg,
                       std::make_shared<Buffer>(std::move(bytes)),
-                      FrameMemory{MemoryKind::kCpu, -1}};
+                      FrameMemory{MemoryKind::kCpu, -1},
+                      inference_submitted};
 }
 
 TEST(JpegVideoDecoderTest, DecodesFixedJpegAndPreservesSourceMetadata) {
@@ -87,6 +88,20 @@ TEST(JpegVideoDecoderTest, DecodesFixedJpegAndPreservesSourceMetadata) {
     ASSERT_NE(result.value().buffer, nullptr);
     EXPECT_EQ(result.value().buffer->size(), 18U);
     EXPECT_TRUE(ValidateVideoFrame(result.value()));
+}
+
+TEST(JpegVideoDecoderTest, PreservesInferenceSubmittedFlagAcrossDecode) {
+    JpegVideoDecoder decoder;
+    ASSERT_TRUE(decoder.Open());
+
+    auto submitted = decoder.Decode(
+        CompressedFrame(DecodeBase64(kThreeByTwoJpegBase64), 3, 2, 7U, 123'456, true));
+    ASSERT_TRUE(submitted) << DescribeError(submitted.error());
+    EXPECT_TRUE(submitted.value().inference_submitted);
+
+    auto skipped = decoder.Decode(CompressedFrame(DecodeBase64(kThreeByTwoJpegBase64)));
+    ASSERT_TRUE(skipped) << DescribeError(skipped.error());
+    EXPECT_FALSE(skipped.value().inference_submitted);
 }
 
 TEST(JpegVideoDecoderTest, UsesJpegHeaderDimensionsWhenSourceMetadataChanges) {

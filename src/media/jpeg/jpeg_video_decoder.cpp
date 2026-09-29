@@ -131,7 +131,8 @@ Result<VideoFrame> JpegVideoDecoder::Decode(const VideoFrame& frame) {
     }
 
     VideoFrame decoded{frame.sequence, frame.pts_us, width, height, stride, PixelFormat::kRgb888,
-                       std::move(pixels), FrameMemory{MemoryKind::kCpu, -1}};
+                       std::move(pixels), FrameMemory{MemoryKind::kCpu, -1},
+                       frame.inference_submitted};
     auto decoded_validation = ValidateVideoFrame(decoded);
     if (!decoded_validation) {
         return Result<VideoFrame>::Failure(decoded_validation.error());
