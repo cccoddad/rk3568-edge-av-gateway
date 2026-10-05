@@ -1,0 +1,98 @@
+#!/bin/sh
+# 文件作用：Buildroot/SysV 下 rkav-gateway 的开机自启、停止、重启与状态查询（收口方案 1）。
+# 主要知识点：start/stop/restart/status 四态、pidof 单实例门禁（三硬件独占）、
+#             --validate-config 前置门禁、USB 设备就绪轮询、SIGTERM 优雅停止 + 超时 KILL、
+#             崩溃 5 秒守护（等价 systemd Restart=on-failure）、日志 32MB 轮转（无 journald）。
+# 安装：复制为板端 /etc/init.d/S99rkav（注意无 .sh 后缀——rcS 对 *.sh 会 source 而非 start），
+#       chmod 0755；停用即删除该文件。ZLM 需先由 /etc/init.d/S85zlm 启动（见同目录 S85zlm）。
+
+RKAV_BIN="/userdata/rkav/bin/rkav-gateway"
+RKAV_CFG="/userdata/rkav/rk3568-rknn-mjpeg-alsa-mpp-osd-autostart.json"
+RKAV_LOG="/userdata/rkav/autostart.log"
+RKAV_PIDFILE="/var/run/rkav-gateway.watchdog"
+
+rkav_rotate_log() {
+    [ -f "$RKAV_LOG" ] || return 0
+    rkav_sz=$(wc -c < "$RKAV_LOG" 2>/dev/null || echo 0)
+    if [ "$rkav_sz" -gt 33554432 ]; then
+        mv "$RKAV_LOG" "$RKAV_LOG.1" 2>/dev/null || true
+    fi
+    return 0
+}
+
+case "$1" in
+    start)
+        if pidof rkav-gateway >/dev/null 2>&1; then
+            echo "rkav-gateway already running"
+            exit 0
+        fi
+        if [ ! -x "$RKAV_BIN" ]; then
+            echo "gateway not executable: $RKAV_BIN"
+            exit 1
+        fi
+        # 前置门禁：配置校验失败绝不起线程（与手动运行同一判据）
+        "$RKAV_BIN" --validate-config --config "$RKAV_CFG" >/dev/null 2>&1 || {
+            echo "config validation failed: $RKAV_CFG"
+            exit 1
+        }
+        # USB 设备就绪门禁：摄像头与声卡最多等 10 秒
+        rkav_i=0
+        while [ ! -e /dev/video9 ] || [ ! -d /dev/snd ]; do
+            rkav_i=$((rkav_i + 1))
+            if [ "$rkav_i" -gt 10 ]; then
+                echo "capture devices not ready (/dev/video9 or /dev/snd)"
+                exit 1
+            fi
+            sleep 1
+        done
+        rkav_rotate_log
+        # 崩溃守护：进程意外退出后 5 秒拉起（stop 会先杀守护，防止复活）
+        (
+            while true; do
+                "$RKAV_BIN" --config "$RKAV_CFG" >> "$RKAV_LOG" 2>&1
+                echo "[S99rkav] gateway exited code=$? , restart in 5s" >> "$RKAV_LOG"
+                sleep 5
+            done
+        ) &
+        echo $! > "$RKAV_PIDFILE"
+        echo "rkav-gateway started (watchdog pid $(cat "$RKAV_PIDFILE"))"
+        ;;
+    stop)
+        if [ -f "$RKAV_PIDFILE" ]; then
+            kill "$(cat "$RKAV_PIDFILE")" 2>/dev/null || true
+            rm -f "$RKAV_PIDFILE"
+        fi
+        if ! pidof rkav-gateway >/dev/null 2>&1; then
+            echo "not running"
+            exit 0
+        fi
+        kill -TERM $(pidof rkav-gateway) 2>/dev/null || true
+        rkav_i=0
+        while pidof rkav-gateway >/dev/null 2>&1; do
+            rkav_i=$((rkav_i + 1))
+            if [ "$rkav_i" -gt 5 ]; then
+                kill -KILL $(pidof rkav-gateway) 2>/dev/null || true
+                echo "killed (SIGKILL after 5s grace)"
+                exit 0
+            fi
+            sleep 1
+        done
+        echo "stopped gracefully"
+        ;;
+    restart)
+        "$0" stop
+        "$0" start
+        ;;
+    status)
+        if pidof rkav-gateway >/dev/null 2>&1; then
+            echo "running pid $(pidof rkav-gateway)"
+            [ -f "$RKAV_PIDFILE" ] && echo "watchdog pid $(cat "$RKAV_PIDFILE")"
+        else
+            echo "stopped"
+        fi
+        ;;
+    *)
+        echo "usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac

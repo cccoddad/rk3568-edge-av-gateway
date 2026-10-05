@@ -1,0 +1,28 @@
+#!/bin/sh
+# 文件作用：ZLMediaKit 开机自启包装（收口方案 1 配套），转调部署包自带 init 脚本。
+# 主要知识点：不直接安装包内 rkav-zlmediakit.init 到 /etc/init.d——该脚本用 $0 相对
+#             定位 MediaServer，移动后路径失效；包装器保持包内路径不变。
+# 安装：复制为板端 /etc/init.d/S85zlm（须排在 S99rkav 之前、S40network 之后），chmod 0755。
+
+ZLM_INIT="/opt/rkav/zlm/rkav-zlmediakit.init"
+
+case "$1" in
+    start|stop|restart)
+        if [ ! -x "$ZLM_INIT" ]; then
+            echo "zlm init not found: $ZLM_INIT"
+            exit 1
+        fi
+        exec "$ZLM_INIT" "$1"
+        ;;
+    status)
+        if pidof MediaServer >/dev/null 2>&1; then
+            echo "zlm running pid $(pidof MediaServer)"
+        else
+            echo "zlm stopped"
+        fi
+        ;;
+    *)
+        echo "usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
