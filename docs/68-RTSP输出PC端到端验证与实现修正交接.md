@@ -131,4 +131,4 @@ ffmpeg_rtsp_sink.write_header: cannot write RTSP stream header: Connection refus
 - [RTSP 网络输出模块实现与 systemd 服务优化](65-RTSP网络输出模块实现与systemd服务优化.md)
 - [FFmpeg 软件 MP4 基线验收与交接](25-FFmpeg软件MP4基线验收与交接.md)
 - [CPU OSD 软件 MP4 验收与交接](26-CPU-OSD软件MP4验收与交接.md)
-- [项目问题汇总：面试版](06-项目问题汇总-面试版.md) 与 [通俗版](07-项目问题汇总-通俗版.md)，P116
+- 问题台账，P116

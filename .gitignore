@@ -11,3 +11,12 @@ compile_commands.json
 Thumbs.db
 __pycache__/
 *.py[cod]
+
+# Internal working files (not part of the published repository)
+AGENTS.md
+.clauderc
+/.cursor/
+docs/06-*
+docs/07-*
+docs/84-*
+docs/85-*

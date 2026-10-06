@@ -4,43 +4,6 @@
 状态：**ZLM 阶段 2 验收 a-g 七项全部通过（e 项经 libsrtp 重建修复）；P129/P130 失联
 系列已处置，第四次失联独立归档 P132 待观察；本文件为最新交接。**
 
-## 0. 给下一段对话的提示词（直接复制给新会话）
-
-```text
-你接手 RK3568 实时音视频边缘分析网关项目（仓库根目录即当前工作区）。刚刚前一个对话超过字数了，现在新开一个。注意一次不要输出超过最大output，分频次输出
-
-第 0 步：git status 确认干净（83 号交接应已提交）；只读阅读 AGENTS.md、
-docs/19-项目当前开发状态.md、本文件 docs/83、docs/81（救援纪律）、docs/82（P129 历史）。
-
-背景速览（2026-09-28）：
-- ZLM 阶段 2 板端验收 a-g 七项全部通过（证据见 §1.4 表；宿主拉流证据在
-  D:\share\zlm-stage2-* 目录，板端推流证据在 /userdata/rkav/zlm-stage2-*）。
-- e 项黑屏根因 = ZLM aarch64 构建的 libsrtp 未启用 OpenSSL 引擎（Chromium 首选
-  SRTP_AEAD_AES_256_GCM，服务端 srtp_create 失败）；已重建修复（P131）：
-  包 rkav-zlmediakit-aarch64-srtpfix-20260928-151435.tar.gz（SHA 7283ac61…），
-  构建脚本 D:\share\vm_zlm_srtpfix_build.sh（VM 内 bash /mnt/hgfs/share/ 下脚本）。
-  板端已部署（旧 MediaServer 备份为 MediaServer.bak-noopenssl），浏览器复测出画面。
-- 板端时钟每次重启回到 1970（RTC 坏），起 ZLM 前必须 `date -u -s '<UTC>'` 校时，
-  否则 DTLS 证书日期异常可能再次黑屏。
-- P132：本会话出现第四次失联（供电灯亮 + CH340 枚举在 + 串口无响应 + ping 100%），
-  断电重启恢复；电源短路已于 9/27 由用户排除，第四次失联是独立问题（疑内核 hang），
-  复发时先串口取证再断电。
-- 硬纪律不变：重启=拔全部线含黑色电源线 15 秒；此板永久禁插 TF 卡；禁止刷写 p1/p3。
-- 固定后续路线（docs/19 §7）：ZLM 阶段 2（已完成）→ 真实 OSD 板端验证 →
-  2/12 小时长稳（板端 SysV 偏差记录）→ systemd 收口。
-- 工具备忘：板端 BusyBox tar 无 -z，解 tar.gz 用 `gunzip -c x.tar.gz | tar x -C dir`；
-  adb shell 里 set -e 遇 kill/pidof 空会中断，加 `|| true`；VM 构建在
-  Ubuntu24.04.3（用户开机），vmrun 在 D:\vmware\，容器镜像 rkav/aarch64-rknn-build:ubuntu22.04；
-  **git push 直连 GitHub 被重置，须走 clash 代理**：
-  `git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push origin main`。
-
-硬性协作规则（AGENTS.md，每轮不可省略）：操作后四段式汇报（做了什么/证据说明什么/
-成败/名词解释）；每个已验证单元更新 docs/19 与最新交接，P 编号入 docs/06/07，
-git add/commit/push origin main，不 force push、不提交未验证能力与用户脏文件
-（.clauderc、docs/65、docs/66、tools/tftp_receive.py、
-tools/docker/rknn-gateway-build.Dockerfile、.cursor/rules/* 保持不提交）。
-```
-
 ## 1. 本会话完成内容
 
 ### 1.1 P129 处置：串口取证与断电恢复（2026-09-27）
@@ -165,4 +128,4 @@ a ✓ / b ✓ / c ✓ / d ✓ / **e ✓（srtpfix 后出画面）** / **f ✓（
 - [ZLMediaKit aarch64 交叉构建与部署包交接](74-ZLMediaKit-aarch64交叉构建与部署包交接.md)（原构建参数出处）
 - [ZLMediaKit 阶段 1 PC 验证交接](73-ZLMediaKit阶段1PC验证交接.md)（参照数字）
 - [板端 RTSP 推流与断连恢复及 FFmpeg 交叉构建交接](77-板端RTSP推流与断连恢复及FFmpeg交叉构建交接.md)
-- [项目问题汇总：面试版](06-项目问题汇总-面试版.md) 与 [通俗版](07-项目问题汇总-通俗版.md)，P130/P131/P132
+- 问题台账，P130/P131/P132

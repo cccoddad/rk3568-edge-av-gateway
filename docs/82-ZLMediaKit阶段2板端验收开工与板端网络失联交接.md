@@ -6,44 +6,6 @@
 a-g 七项全通过、P131 srtp 修复、P132 第四次失联待观察）。本文件保留 P129
 现场与验收清单原文。**
 
-## 0. 给下一段对话的提示词（直接复制给新会话）
-
-```text
-你接手 RK3568 实时音视频边缘分析网关项目（仓库根目录即当前工作区）。
-
-第 0 步：git status 确认干净（82 号交接应已提交）；只读阅读 AGENTS.md、
-docs/19-项目当前开发状态.md、本文件 docs/82、docs/81（救援纪律）、docs/80（候选已封存不用读细节）。
-
-背景速览（2026-09-27）：
-- 路线决策（P128，已提交 d336446）：5.10/DTS 升级与 p1 原厂 U-Boot 还原全部关闭，
-  不再刷写任何分区；docs/80 候选仅归档留证；主线 = 4.19 业务收口。
-- 板端 2026-09-26 已救援恢复原厂 4.19.232（细节见 81）；ZLM 部署于 /opt/rkav/zlm，
-  RTSP 8554 / HTTP 8080 / RTMP 1935 / WebRTC 8000，MediaServer 守护运行。
-- 本会话开工 ZLM 阶段 2 验收：板端 API 自检通过（wget getMediaList/getThreadsLoad 均
-  code:0，secret=y4YVy5XjFCAffNR2h14glk20XxexRw8u）；摄像头 /dev/video9、ALSA hw:2,0、
-  YOLOv5 模型、网关 ELF 90d025b8 均核验在位；随后板端整机网络失联——宿主机 ping
-  100% 丢包、adb connect 超时（P129），当时串口监听未武装，无日志证据。
-- 当前状态：板子离线未恢复；宿主网卡 192.168.50.1/24 正常；板载 CH340 串口 COM9 在位
-  （COM 号随插拔漂移，以设备管理器为准）。
-- 下一步主线（按 docs/82 §4）：① 先起串口监听 D:\share\serial_watch.ps1 15 分钟取证；
-  ② 若板子无输出/死透，按 81 §8 纪律请用户真断电重启（拔黑电源线 15 秒，无 TF 卡）；
-  ③ 起机后先只读定位网络失联根因（dmesg/eth0 carrier/是否重启过），再进 ZLM 阶段 2
-  验收清单（§4.5 a-g）；④ 其后固定顺序：真实 OSD → 2/12 小时长稳 → systemd 偏差记录。
-- 硬纪律（81 §0/§8）：重启=拔全部线含黑色电源线 15 秒；此板永久禁插 TF 卡；任何 dd 前
-  先 ls -l 核分区大小；路线已关闭，禁止刷写 p1/p3 任何分区。
-- 工具：板端无 curl 用 wget；板端 ps 显示不全用 /proc/[pid]/cmdline 扫描；Git Bash 调
-  adb 需 MSYS_NO_PATHCONV=1；Windows→板 HTTP 测 API 加 secret 参数。
-- 工具链注意（非项目）：本机模型配置已修复为 mimo-v2.6-flash（settings.json，备份
-  settings.json.bak-mimo-default）；若用 CC Switch 切换供应商可能把默认模型覆盖回 glm-5.3，
-  切换后检查 ~/.claude/settings.json 的 ANTHROPIC_MODEL。
-
-硬性协作规则（AGENTS.md，每轮不可省略）：操作后四段式汇报（做了什么/证据说明什么/
-成败/名词解释）；每个已验证单元更新 docs/19 与最新交接，P 编号入 docs/06/07，
-git add/commit/push origin main，不 force push、不提交未验证能力与用户脏文件
-（.clauderc、docs/65、docs/66、tools/tftp_receive.py、
-tools/docker/rknn-gateway-build.Dockerfile、.cursor/rules/* 保持不提交）。
-```
-
 ## 1. 本会话完成内容
 
 ### 1.1 路线决策：5.10/DTS 升级与 p1 还原全部关闭（P128，已提交 d336446）
@@ -167,4 +129,4 @@ tools/docker/rknn-gateway-build.Dockerfile、.cursor/rules/* 保持不提交）�
 - [ZLMediaKit 阶段 1 PC 验收交接](73-ZLMediaKit阶段1PC验证交接.md)（验收方法与参照数字）
 - [ZLMediaKit aarch64 交叉构建与部署包交接](74-ZLMediaKit-aarch64交叉构建与部署包交接.md)（部署包与端口策略）
 - [GEC V11 B 方案 DTS 移植候选构建与门禁交接](80-GEC-V11-B方案DTS移植候选构建与门禁交接.md)（已封存）
-- [项目问题汇总：面试版](06-项目问题汇总-面试版.md) 与 [通俗版](07-项目问题汇总-通俗版.md)，P128/P129
+- 问题台账，P128/P129

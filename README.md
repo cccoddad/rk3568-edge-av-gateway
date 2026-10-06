@@ -1,191 +1,132 @@
 # RK3568 实时音视频边缘分析网关
 
-这是按《开发全流程手册》实现的第一版正式工程。Mock 后端用于可重复回归，Linux 上已经
-加入并实机验证真实 V4L2 摄像头和 ALSA 麦克风后端；RKNN YOLOv5 推理后端已经实现为可选
-模块。默认配置仍保留 Checksum 编码与输出，另有可选 FFmpeg H.264/AAC 编码和 MP4 输出软件
-基线。硬件替换不修改公共数据契约和 Application 主流程。
+[![CI](https://github.com/cccoddad/rk3568-edge-av-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/cccoddad/rk3568-edge-av-gateway/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-使用 AI/Codex 继续开发前必须先阅读根目录 [AGENTS.md](AGENTS.md)。该文件定义项目范围、
-工作区保护、开发板操作边界、Git 规则、验收证据和固定后续顺序；动态进度仍以 `docs/19` 和
-最新编号交接文档为准。
+> **English summary.** A production-grade real-time audio/video edge analytics gateway for
+> RK3568 (ARM64, Buildroot Linux): V4L2/ALSA capture → RKNN NPU YOLOv5 detection →
+> CPU OSD overlay → MPP H.264 + AAC encode → RTSP push into ZLMediaKit with
+> RTMP / HTTP-FLV / HLS / WebRTC distribution. A single process with six worker threads
+> and bounded queues. Verified by a **120-hour continuous soak** — one uninterrupted run,
+> zero restarts, zero pipeline errors, **24.5M packets pushed with zero drop**,
+> p99 overlay latency **2.5 ms** — plus 66 automated tests under Debug and ASan/UBSan.
+> All numbers are reproducible; see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
-## 当前完成度
+![OSD overlay on live camera output](docs/assets/osd-overlay-demo.png)
 
-- M0 工程基线：CMake targets、presets、严格编译告警、格式和静态检查配置。
-- M1 公共核心：Error/Result、Buffer、Frame/Packet、单调时钟、时间戳换算、有界队列。
-- M2 Mock 数据：RGB 测试图、连续正弦波、可配置视频失败、XRUN 和设备失联。
-- M3 多线程管道：Mock 推理、Checksum Encoder、PacketRouter、Null/JSONL Sink。
-- M4 工程能力：强类型配置、结构化日志、指标、工作线程健康检查和故障退出。
-- M6 推理接入：RKNN 1.4.0 生命周期、MJPEG 解码、RGB/BGR 缩放、YOLOv5 后处理和来源坐标映射。
-- M7 软件媒体基线：FFmpeg H.264/AAC 编码、MP4 封装、`.part` 临时文件原子提交和 `ffprobe` 验收。
-- M8 CPU OSD：精确来源帧绑定、检测框/文字叠加、独立像素 Buffer 和有界结果等待。
-- 自动测试：49 项单元与集成测试，覆盖正常、慢推理、限速、坏 JPEG 恢复、故障场景、媒体和 OSD 配置契约。
+*实板输出实拍：1280×720 MJPEG 摄像头画面上叠加 YOLOv5 检测框、类别置信度与网关 OSD 信息。*
 
-ARM64 静态 Mock 已在 RK3568 Buildroot 完成 33 项当前 PC 回归基线、板端 30 项旧基线、
-信号退出、30 分钟和 2 小时长稳。绿联 2K 摄像头已完成 UVC/UAC 枚举、720p MJPEG 样本、
-48 kHz 双声道 WAV 和 300 帧持续采集验收。第一版 V4L2 MMAP 后端已完成 ARM64 交叉编译，
-并在板端通过 60 秒 Application 联调：1,741 帧、约 29.0 FPS、零错误和零队列丢弃。ALSA
-内核 UAPI 后端也已完成 ARM64 交叉编译和板端双路联调：10 秒采集 500 个音频块和 285 帧
-视频；30 分钟采集 90,000 个音频块和 52,340 帧视频，RSS 稳定为 9,728 KiB，错误、恢复和
-队列丢弃均为 0，SIGINT/SIGTERM 也能排空队列并正常退出。独立 RKNN 1.4.0 MobileNet 和
-YOLOv5s 已在板端完成真实 NPU 推理，YOLOv5 已验证固定图、摄像头单帧及连续 10 次基线。
-主程序 Mock RGB + RKNN 已在板端完成 10 秒验证，51 次请求与结果全部完成，NPU 中断增加
-51 次且无新增相关内核错误。主程序的 libjpeg-turbo MJPEG 解码预处理也已实现，并通过真实
-1280x720 摄像头 JPEG 的 Windows Debug/Release 回归。板端真实 MJPEG + RKNN 10 秒链路也已
-通过：269 帧视频、49 次解码/推理/NPU 中断、零错误、零队列丢弃和零新增相关内核错误。
-随后 60 秒稳定性测试也通过：61.17 秒采集 1,660 帧（27.14 FPS），291 次解码、推理结果
-和 NPU 中断完全对应，峰值温度 51.875 摄氏度，仍为零错误、零恢复和零队列丢弃。
-真实 ALSA 麦克风加入后，首次联合测试发现 PCM 在 RKNN 初始化前过早启动，约 80 ms 的
-缓冲区在读取线程启动前溢出。现已把 ALSA `START` 推迟到第一次 `Read()`；修复版三硬件
-10 秒测试得到 276 帧视频、500 个音频块和 49 次解码/推理/NPU 中断，错误、恢复、线程错误、
-队列丢弃和新增相关内核错误均为 0。30 分钟三硬件联合长稳也已收口：50,237 帧视频、89,983
-个音频块、8,714 次推理结果和 NPU 中断全部守恒，RSS 工作态稳定为 57,652 KiB、线程数稳定为
-9、峰值温度 57.222 摄氏度，错误、恢复、线程错误、队列丢弃和停止后残留均为 0。原控制器把
-有上限的解码延迟滑动窗口样本数误当成累计解码次数，因而写出 `failed:1`；项目保留该原始记录，
-并在五份原始证据 SHA-256 校验通过后按修正规则完成重验收。
-真实 RKNN 三硬件链路的 USB 断连与重插恢复也已通过：拔出同一台 UGREEN USB 复合设备后，
-视频和音频节点同时消失，网关无需外部强停便在约 3.27 秒后安全退出，全部队列关闭且无丢弃/
-残留；重新插入后再次运行 10 秒，取得 279 帧视频、500 个音频块和 49 次推理/NPU 中断，
-错误、恢复和工作线程错误均为 0。当前恢复语义仍是安全退出后重新启动，不是进程内自动热重连。
-Ubuntu 主机上的 5 秒 Mock FFmpeg 软件媒体基线也已通过：产出实际 H.264/AAC MP4，`ffprobe`
-确认 320x180 视频、48 kHz 双声道音频、5.020 秒时长、单调 PTS/DTS 和 0 ms 起始音画偏移。
-该结果不等于 RK3568 上的 FFmpeg/MPP 实机媒体输出，也不包含 RTSP；默认 Checksum packet
-仍不是 H.264/AAC 成品。
-CPU OSD 也已在新的 Ubuntu 软件 MP4 验收中通过：151 帧均在同一来源帧检测结果到达后叠加
-检测框和文字，p99 叠加耗时 260 微秒，零跳过和零队列丢弃。这仍不是 RK3568 实机 OSD 或 RGA
-加速结果。
+## 项目亮点
 
-## 数据流
+1. **全链路自主实现**：从 USB 设备驱动接入、NPU 推理、OSD 叠加到硬件编码与多协议流媒体
+   分发，单进程 6 线程有界队列管道，每类数据独立的背压策略（丢旧 / 保留最新 / 阻塞）。
+2. **工业级长稳证据**：120 小时单次连续运行零重启、零错误、推流零丢包——
+   每个数字都有结果目录、SHA-256 清单与结构化日志可复核（[基准数据](docs/BENCHMARKS.md)）。
+3. **Mock 先行的回归方法**：66 项自动化测试在无硬件环境下全量运行，
+   硬件后端逐个替换而不动公共数据契约与主流程；CI 覆盖 clang-format / clang-tidy /
+   Debug / ASan+UBSan。
+4. **严格的配置契约**：字段拼写、类型、范围、后端可用性全部在**线程启动前**校验拒绝，
+   `--validate-config` 可独立执行。
+5. **自愈与可运维**：崩溃 5 秒自动拉起、SIGTERM 优雅停止、开机自启（SysV 守护），
+   SSH / adb / 串口三通道运维。
 
-```text
-Mock/V4L2VideoCapture -> video queue -> ChecksumVideoEncoder -------+
-                      -> inference queue -> optional MJPEG Decoder  |
-                                         -> Mock/RKNN Inference     |
-                                                               +-> PacketRouter -> sinks
-Mock/AlsaAudioCapture  -> audio queue -> ChecksumAudioEncoder    +
+## 核心指标（实测，2026-10 完成）
+
+| 指标 | 实测值 |
+|---|---|
+| 120 小时连续长稳 | 单次运行 432,000 s，零重启，exit 0 |
+| 管线错误 / 自动恢复 / 队列异常 | 0 / 0 / 设计内策略丢弃 0.031%（编码入口） |
+| RTSP 推流 | 24,537,112 包，**零丢包** |
+| OSD 叠加延迟 | p99 **2.5 ms**（帧周期 33 ms 的 1/13） |
+| NPU 推理 | 1,558,667 次，请求=结果 **100%**，p99 125.7 ms |
+| 异常帧容错 | 跳帧率 0.0011%，零崩溃（USB 截断帧自动容错） |
+| 端到端播放延迟 | 0.3~0.7 s（WebRTC，最差 1.1 s） |
+| 自动化测试 | **66/66** 全绿（Debug + ASan/UBSan） |
+
+## 系统架构
+
+```mermaid
+flowchart LR
+    CAM["USB 摄像头<br/>V4L2 MMAP · 1280×720 MJPEG"] -->|drop_oldest| VQ["视频队列<br/>容量 4"]
+    MIC["USB 麦克风<br/>ALSA 内核 UAPI · 48kHz 双声道"] -->|block_producer| AQ["音频队列<br/>300ms"]
+    VQ --> DEC["libjpeg-turbo 解码"]
+    DEC --> INF["RKNN Runtime 1.4.0<br/>YOLOv5s INT8 · 5 fps"]
+    VQ --> SRC["同源帧校验<br/>sequence/PTS + 400ms 有效期"]
+    SRC --> OV["CPU OSD<br/>检测框 + 置信度文字"]
+    OV --> ENC["MPP H.264 硬编码"]
+    AQ --> AAC["FFmpeg AAC 编码"]
+    ENC --> RTR["PacketRouter"]
+    AAC --> RTR
+    RTR --> RTSP["RTSP 推流<br/>tcp · 断线重连"]
+    RTSP --> ZLM["ZLMediaKit<br/>RTMP / HTTP-FLV / HLS / WebRTC"]
 ```
 
-每个跨线程队列都有固定容量。视频与推理队列优先保留新数据；音频队列阻塞生产者并在
-长期阻塞时明确报错。每个输出端有独立队列，因此慢输出不会阻塞其他输出或采集线程。
+| 设计点 | 方案 |
+|---|---|
+| 并发模型 | 6 个 worker 线程 + 每输出端独立线程，全部经有界队列 |
+| 队列语义 | 视频丢旧保新鲜、推理保最新、音频背压阻塞——策略跟数据语义走 |
+| 错误处理 | `Result<T>` 分类预期故障；致命错误结构化带根因退出 |
+| 运行监控 | JSON 行日志 + 周期指标（延迟分位/队列水位/最近进展）+ 线程健康看门狗 |
 
 ## 快速开始
 
-### Windows / PowerShell
-
-仓库当前目录名含非 ASCII 字符，部分 Windows Ninja 版本无法直接处理。脚本会在
-`%LOCALAPPDATA%/rkav-gateway` 下建立短路径 Junction，并在短路径构建：
+**Windows**（仓库路径含特殊字符，经短路径 Junction 构建）：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\build_windows.ps1
 ```
 
-脚本会依次配置、编译、运行全部测试并校验默认配置。要求命令行可找到 CMake 3.20+、
-Ninja、支持 C++20 的 GCC/Clang/MSVC，以及 Git。首次构建会下载并校验锁定版本的
-libjpeg-turbo，同时下载锁定版本的 nlohmann/json 和 GoogleTest。
-
-### Ubuntu / RK3568 Debian 系统
+**Linux / Ubuntu**：
 
 ```bash
-sudo apt update
 sudo apt install -y build-essential cmake ninja-build git
 sh ./tools/build_and_test.sh
 ```
 
-也可手动执行：
+**手动三步**：
 
 ```bash
-cmake --preset debug
-cmake --build --preset debug -j4
-ctest --preset debug
+cmake --preset debug && cmake --build --preset debug -j4
+ctest --preset debug                                  # 66 项测试
 ./build/debug/rkav-gateway --validate-config --config config/mock.json
-./build/debug/rkav-gateway --config config/mock.json
+./build/debug/rkav-gateway --config config/mock.json --duration 0   # 跑到 SIGTERM
 ```
 
-默认配置运行 10 秒后正常退出。持续运行到收到 `SIGINT`/`SIGTERM`：
+**板端（RK3568）**：交叉编译产物与部署步骤见
+[docs/09-Buildroot交叉编译与RK3568上板阶段总结](docs/09-Buildroot交叉编译与RK3568上板阶段总结.md)；
+板端一键冒烟 / 长稳工具见 [tools/board_osd_run.sh](tools/board_osd_run.sh)。
 
-```bash
-./build/debug/rkav-gateway --config config/mock.json --duration 0
+## 测试与质量
+
+```text
+100% tests passed, 0 tests failed out of 66
 ```
 
-## 常用命令
+- 单元测试覆盖队列策略、配置契约、错误分类、OSD 坐标变换、JPEG 坏帧恢复；
+- 集成测试跑整条 Mock 管道（含慢推理、限速、设备失联场景）；
+- `asan` 预设（ASan+UBSan）已抓出并修复过 RTSP 重连 FD 泄漏；
+- 配置/格式/静态检查由 [CI](.github/workflows/ci.yml) 强制。
 
-```bash
-# 查看帮助和版本
-./build/debug/rkav-gateway --help
-./build/debug/rkav-gateway --version
+## 文档导航
 
-# 仅校验配置，不创建线程
-./build/debug/rkav-gateway --validate-config --config config/mock.json
-
-# 本次运行覆盖为 60 秒，不修改 JSON
-./build/debug/rkav-gateway --config config/mock.json --duration 60
-
-# Linux ASan + UBSan
-cmake --preset asan
-cmake --build --preset asan -j4
-ctest --preset asan
-
-# 30 分钟长稳并采集资源数据
-sh ./tools/soak_test.sh 1800
-```
-
-RK3568 M5 板端基线、Sanitizer、SIGTERM、长稳和 systemd 的完整验收步骤见
-[M5 板端验收](docs/08-RK3568开发板M5阶段验收.md)。
-
-当前粤嵌 Buildroot 的交叉编译、直连网络、TF 卡部署、实测指标和下一步见
-[Buildroot 交叉编译与 RK3568 上板阶段总结](docs/09-Buildroot交叉编译与RK3568开发板部署总结.md)。
-
-真实绿联摄像头和麦克风的 VID/PID、格式、样本与持续采集证据见
-[绿联 2K USB 音视频设备验收](docs/11-绿联摄像头与麦克风验收.md)。
-
-与板端 Runtime 1.4.0 匹配的开发文件、独立 AArch64 冒烟程序和验收边界见
-[RKNN 1.4.0 独立冒烟测试](docs/15-RKNN运行时独立冒烟测试.md)。
-
-YOLOv5s 转换、真实摄像头单帧检测、连续推理基线和主程序后端接入状态见
-[RKNN YOLOv5 主程序后端接入](docs/17-RKNN-YOLOv5主程序后端接入.md)。
-
-主程序 MJPEG 解码实现、PC 侧证据和下一次板端验收边界见
-[MJPEG 解码预处理接入与验收](docs/22-MJPEG解码预处理接入与验收.md)。
-
-本轮完整实现清单、30 分钟证据、验收规则修正和固定后续顺序见
-[真实三硬件联合验收与 ALSA 启动修复总结](docs/23-真实三硬件联合验收与ALSA启动修复总结.md)。
-真实 RKNN 链路的 USB 断连、安全退出、重插重启证据和当前恢复边界见
-[USB 断连与重插恢复验收](docs/24-USB断连与重插恢复验收.md)。
-[MPP/RGA 运行时盘点与 SDK 门禁](docs/27-MPP-RGA运行时盘点与SDK门禁.md)记录硬件运行库、
-驱动证据和真实硬件编码/加速实现前必须满足的 SDK 条件。
-较早的 RKNN 接入过程见
-[本次会话实现总结与下一步](docs/18-本次会话实现总结与下一步.md)。
-
-## 目录说明
-
-| 路径 | 职责 |
+| 文档 | 内容 |
 |---|---|
-| `include/rkav/common` | 公共错误、内存、时间和数据契约 |
-| `include/rkav/capture` | 视频/音频采集接口及 Mock 声明 |
-| `include/rkav/vision` | 推理接口和图像坐标变换 |
-| `include/rkav/media` | 视频解码、编码接口和 Checksum 测试编码器 |
-| `include/rkav/output` | PacketRouter 和输出端接口 |
-| `src` | 对应模块实现 |
-| `app/main.cpp` | 参数、信号和 Application 生命周期入口 |
-| `config/mock.json` | 可直接运行的基线配置 |
-| `tests/unit` | 不依赖真实时间和设备的单元测试 |
-| `tests/integration` | 整条 Mock 管道测试 |
-| `deploy` | systemd 服务文件 |
-| `docs` | 架构、开发手册、配置和阶段状态 |
+| [docs/BENCHMARKS.md](docs/BENCHMARKS.md) | 实测基准：长稳阶梯、延迟分位、资源、复现判据 |
+| [docs/ENGINEERING-NOTES.md](docs/ENGINEERING-NOTES.md) | 十个代表性问题的根因分析与设计决策 |
+| [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | 编码、验收证据、板端安全、Git 约定 |
+| [docs/01-项目总体代码架构.md](docs/01-项目总体代码架构.md) | 架构与模块边界 |
+| [docs/04-项目配置说明.md](docs/04-项目配置说明.md) | 配置字段与语义 |
+| [docs/19-项目当前开发状态.md](docs/19-项目当前开发状态.md) | 当前状态与路线 |
+| [docs/](docs/) | 阶段验收与交接记录（按编号） |
 
-## 配置与日志
+## 已知观察项
 
-配置采用严格字段检查。字段拼错、类型错误、范围错误、选择未编译后端或没有可用输出
-都会在启动线程前失败。详细字段见
-[配置说明](docs/04-项目配置说明.md)。
+工程上如实记录而非隐藏（详见 [BENCHMARKS §4](docs/BENCHMARKS.md)）：
 
-日志每行是一个 JSON 对象，可按 `module`、`event`、`level` 搜索。周期指标包括总帧数、
-包数、错误、恢复次数、阶段延迟分位数和各队列高水位/丢弃数。禁止在每帧路径打印
-INFO 日志，以免日志 I/O 干扰实时链路。
+- 板级偶发网络失联已 5 次，均有串口取证与恢复规程，根因线索已归档（持续观察）；
+- USB 传输 0.0011% 概率的截断帧由解码层容错丢弃，不产生花屏；
+- 板载 RTC 失效，冷启动需对时（已纳入运维规程）。
 
-## 后续接真实硬件
+## 许可证
 
-接入顺序固定为 V4L2 摄像头、ALSA 麦克风、RKNN、RGA/MPP、实际封装与网络输出；一次
-只替换一个 Mock 后端，并保持全部现有测试通过。Rockchip SDK 类型不得进入
-`rkav_core` 公共头文件。当前限制和下一步见
-[开发状态](docs/19-项目当前开发状态.md)。
+[MIT](LICENSE)
