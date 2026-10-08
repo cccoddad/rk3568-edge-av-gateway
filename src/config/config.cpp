@@ -242,9 +242,8 @@ Result<void> ParseInference(const Json& json, InferenceConfig& config) {
 
 /// 功能：解析 OSD 开关、实现后端和有界等待参数。
 Result<void> ParseOverlay(const Json& json, OverlayConfig& config) {
-    auto keys = RejectUnknownKeys(json, "overlay",
-                                  {"enabled", "backend", "line_width", "draw_labels",
-                                   "wait_for_result_ms"});
+    auto keys = RejectUnknownKeys(
+        json, "overlay", {"enabled", "backend", "line_width", "draw_labels", "wait_for_result_ms"});
     if (!keys) {
         return keys;
     }
@@ -268,9 +267,9 @@ Result<void> ParseOutputs(const Json& json, std::vector<OutputConfig>& outputs) 
             "outputs[" + std::to_string(index) + ']';  // 用于错误定位的数组路径。
         auto keys = RejectUnknownKeys(
             item, path,
-            {"type", "enabled", "required", "validate_timestamps", "path",
-             "reconnect_interval_ms", "rtsp_transport", "rtsp_timeout_ms", "queue_capacity",
-             "overflow_policy", "push_timeout_ms", "write_delay_ms", "fail_after_packets"});
+            {"type", "enabled", "required", "validate_timestamps", "path", "reconnect_interval_ms",
+             "rtsp_transport", "rtsp_timeout_ms", "queue_capacity", "overflow_policy",
+             "push_timeout_ms", "write_delay_ms", "fail_after_packets"});
         if (!keys) {
             return keys;
         }
@@ -334,10 +333,10 @@ Result<AppConfig> ConfigLoader::LoadFromFile(const std::string& path) {
 Result<AppConfig> ConfigLoader::Parse(std::string_view json_text) {
     try {
         const Json root = Json::parse(json_text);  // 顶层 JSON 对象。
-        auto keys = RejectUnknownKeys(root, "config",
-                                      {"schema_version", "runtime", "video", "audio", "inference",
-                                       "overlay", "video_encoder", "audio_encoder", "outputs",
-                                       "monitoring"});
+        auto keys = RejectUnknownKeys(
+            root, "config",
+            {"schema_version", "runtime", "video", "audio", "inference", "overlay", "video_encoder",
+             "audio_encoder", "outputs", "monitoring"});
         if (!keys) {
             return Result<AppConfig>::Failure(keys.error());
         }
@@ -376,10 +375,9 @@ Result<AppConfig> ConfigLoader::Parse(std::string_view json_text) {
         }
         if (root.contains("video_encoder")) {
             const auto& encoder = root.at("video_encoder");
-            keys = RejectUnknownKeys(
-                encoder, "video_encoder",
-                {"backend", "mock_keyframe_interval", "codec_name", "bitrate_bps", "gop_size",
-                 "preset"});
+            keys = RejectUnknownKeys(encoder, "video_encoder",
+                                     {"backend", "mock_keyframe_interval", "codec_name",
+                                      "bitrate_bps", "gop_size", "preset"});
             if (!keys) {
                 return Result<AppConfig>::Failure(keys.error());
             }
@@ -626,11 +624,13 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
         }
         if (config.video.format == PixelFormat::kMjpeg) {
 #if !RKAV_WITH_JPEG
-            return fail("video.format", "FFmpeg H.264 from MJPEG requires the JPEG decoder feature");
+            return fail("video.format",
+                        "FFmpeg H.264 from MJPEG requires the JPEG decoder feature");
 #endif
         } else if (config.video.format != PixelFormat::kRgb888 &&
                    config.video.format != PixelFormat::kBgr888) {
-            return fail("video.format", "FFmpeg software baseline requires RGB/BGR or decodable MJPEG");
+            return fail("video.format",
+                        "FFmpeg software baseline requires RGB/BGR or decodable MJPEG");
         }
 #else
         return fail("video_encoder.backend", "FFmpeg video encoder is not compiled in");
@@ -721,8 +721,7 @@ Result<void> ConfigLoader::Validate(const AppConfig& config) {
                 return fail("outputs[" + std::to_string(index) + "].path",
                             "RTSP output URL must start with rtsp://");
             }
-            if (config.video_encoder.backend != "ffmpeg" &&
-                config.video_encoder.backend != "mpp") {
+            if (config.video_encoder.backend != "ffmpeg" && config.video_encoder.backend != "mpp") {
                 return fail("outputs[" + std::to_string(index) + "].type",
                             "RTSP output requires a real H.264 encoder (ffmpeg or mpp)");
             }

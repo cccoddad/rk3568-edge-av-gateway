@@ -122,7 +122,7 @@ TEST(JpegVideoDecoderTest, ReportsCorruptJpegAsRetryableFrameError) {
     JpegVideoDecoder decoder;
     ASSERT_TRUE(decoder.Open());
     std::vector<std::byte> corrupt{std::byte{0xFF}, std::byte{0xD8}, std::byte{0x00},
-                                  std::byte{0x01}, std::byte{0x02}};
+                                   std::byte{0x01}, std::byte{0x02}};
 
     auto result = decoder.Decode(CompressedFrame(std::move(corrupt)));
 
@@ -140,8 +140,8 @@ TEST(JpegVideoDecoderTest, RecoversAfterCorruptFrameOnTheSameDecoder) {
     ASSERT_FALSE(corrupt_result);
     ASSERT_TRUE(corrupt_result.error().retryable);
 
-    auto recovered = decoder.Decode(
-        CompressedFrame(DecodeBase64(kThreeByTwoJpegBase64), 3, 2, 8U, 234'567));
+    auto recovered =
+        decoder.Decode(CompressedFrame(DecodeBase64(kThreeByTwoJpegBase64), 3, 2, 8U, 234'567));
 
     ASSERT_TRUE(recovered) << DescribeError(recovered.error());
     EXPECT_EQ(recovered.value().sequence, 8U);
@@ -155,8 +155,8 @@ TEST(JpegVideoDecoderTest, ContinuouslyDecodesFramesDeterministically) {
     ASSERT_TRUE(decoder.Open());
     std::uint64_t expected_checksum = 0U;
     for (std::uint64_t sequence = 0U; sequence < 20U; ++sequence) {
-        auto result = decoder.Decode(
-            CompressedFrame(DecodeBase64(kThreeByTwoJpegBase64), 3, 2, sequence));
+        auto result =
+            decoder.Decode(CompressedFrame(DecodeBase64(kThreeByTwoJpegBase64), 3, 2, sequence));
         ASSERT_TRUE(result) << DescribeError(result.error());
         const std::uint64_t checksum = Fnv1a64(result.value().buffer->span());
         if (sequence == 0U) {

@@ -1,10 +1,11 @@
 // 文件作用：使用 RK3568 RGA 把 RGB/BGR 转为 NV12，并通过 MPP 输出 H.264 Annex-B 包。
 #include "rkav/media/mpp_rga_video_encoder.h"
 
+#include <dlfcn.h>
+
 #include <chrono>
 #include <cstddef>
 #include <cstring>
-#include <dlfcn.h>
 #include <map>
 #include <mutex>
 #include <string>
@@ -22,7 +23,7 @@ namespace {
 
 Error MppRgaError(std::string_view operation, int code, std::string message) {
     return Error{ErrorCategory::kCodec, code, "mpp_rga_video_encoder", std::string(operation),
-                 std::move(message), false};
+                 std::move(message),    false};
 }
 
 Error DynamicLibraryError(std::string_view operation, std::string_view library) {
@@ -119,17 +120,19 @@ struct MppRgaVideoEncoder::Impl {
         Result<void> Open() {
             mpp_library = dlopen("librockchip_mpp.so.0", RTLD_NOW | RTLD_LOCAL);
             if (mpp_library == nullptr) {
-                return Result<void>::Failure(DynamicLibraryError("load_mpp", "librockchip_mpp.so.0"));
+                return Result<void>::Failure(
+                    DynamicLibraryError("load_mpp", "librockchip_mpp.so.0"));
             }
             rga_library = dlopen("librga.so.2.1.0", RTLD_NOW | RTLD_LOCAL);
             if (rga_library == nullptr) {
                 Close();
                 return Result<void>::Failure(DynamicLibraryError("load_rga", "librga.so.2.1.0"));
             }
-#define RKAV_LOAD_MPP(member, symbol) \
-    if (!LoadSymbol(mpp_library, symbol, &member)) { \
-        Close(); \
-        return Result<void>::Failure(MppRgaError("load_mpp_symbol", 0, "missing MPP symbol: " symbol)); \
+#define RKAV_LOAD_MPP(member, symbol)                                          \
+    if (!LoadSymbol(mpp_library, symbol, &member)) {                           \
+        Close();                                                               \
+        return Result<void>::Failure(                                          \
+            MppRgaError("load_mpp_symbol", 0, "missing MPP symbol: " symbol)); \
     }
             RKAV_LOAD_MPP(create, "mpp_create");
             RKAV_LOAD_MPP(init, "mpp_init");
@@ -160,10 +163,11 @@ struct MppRgaVideoEncoder::Impl {
             RKAV_LOAD_MPP(packet_get_dts, "mpp_packet_get_dts");
             RKAV_LOAD_MPP(packet_get_eos, "mpp_packet_get_eos");
 #undef RKAV_LOAD_MPP
-#define RKAV_LOAD_RGA(member, symbol) \
-    if (!LoadSymbol(rga_library, symbol, &member)) { \
-        Close(); \
-        return Result<void>::Failure(MppRgaError("load_rga_symbol", 0, "missing RGA symbol: " symbol)); \
+#define RKAV_LOAD_RGA(member, symbol)                                          \
+    if (!LoadSymbol(rga_library, symbol, &member)) {                           \
+        Close();                                                               \
+        return Result<void>::Failure(                                          \
+            MppRgaError("load_rga_symbol", 0, "missing RGA symbol: " symbol)); \
     }
             RKAV_LOAD_RGA(wrap_file_descriptor, "wrapbuffer_fd_t");
             RKAV_LOAD_RGA(convert_color, "imcvtcolor_t");
@@ -233,7 +237,7 @@ MppRgaVideoEncoder::MppRgaVideoEncoder() : impl_(std::make_unique<Impl>()) {}
 MppRgaVideoEncoder::~MppRgaVideoEncoder() { Close(); }
 
 Result<EncodedStreamInfo> MppRgaVideoEncoder::Open(const VideoEncoderConfig& config,
-                                                    const VideoCapabilities& input) {
+                                                   const VideoCapabilities& input) {
     std::scoped_lock lock(impl_->mutex);
     if (impl_->open) {
         return Result<EncodedStreamInfo>::Failure(
@@ -243,7 +247,8 @@ Result<EncodedStreamInfo> MppRgaVideoEncoder::Open(const VideoEncoderConfig& con
         input.width <= 0 || input.height <= 0 || input.fps <= 0 || (input.width % 2) != 0 ||
         (input.height % 2) != 0 || config.bitrate_bps <= 0 || config.gop_size <= 0) {
         return Result<EncodedStreamInfo>::Failure(MppRgaError(
-            "open", 0, "MPP H.264 requires even-sized RGB888/BGR888 input and positive bitrate/GOP"));
+            "open", 0,
+            "MPP H.264 requires even-sized RGB888/BGR888 input and positive bitrate/GOP"));
     }
     auto libraries = impl_->symbols.Open();
     if (!libraries) {
@@ -256,20 +261,20 @@ Result<EncodedStreamInfo> MppRgaVideoEncoder::Open(const VideoEncoderConfig& con
     impl_->source_rga_format = ToRgaFormat(input.format);
 
     MPP_RET result = impl_->symbols.buffer_group_get(&impl_->buffer_group, MPP_BUFFER_TYPE_ION,
-                                                       MPP_BUFFER_INTERNAL, "rkav", __func__);
+                                                     MPP_BUFFER_INTERNAL, "rkav", __func__);
     if (result != MPP_OK) {
         impl_->Close();
         return Result<EncodedStreamInfo>::Failure(
             MppRgaError("allocate_buffer_group", result, "cannot allocate MPP ION buffer group"));
     }
-    const std::size_t nv12_size = static_cast<std::size_t>(impl_->stride) *
-                                  static_cast<std::size_t>(impl_->height) * 3U / 2U;
+    const std::size_t nv12_size =
+        static_cast<std::size_t>(impl_->stride) * static_cast<std::size_t>(impl_->height) * 3U / 2U;
     result = impl_->symbols.buffer_get(impl_->buffer_group, &impl_->nv12_buffer, nv12_size, "rkav",
-                                        __func__);
+                                       __func__);
     if (result != MPP_OK || impl_->symbols.buffer_ptr(impl_->nv12_buffer, __func__) == nullptr) {
         impl_->Close();
-        return Result<EncodedStreamInfo>::Failure(
-            MppRgaError("allocate_nv12_buffer", result, "cannot allocate writable MPP NV12 buffer"));
+        return Result<EncodedStreamInfo>::Failure(MppRgaError(
+            "allocate_nv12_buffer", result, "cannot allocate writable MPP NV12 buffer"));
     }
     result = impl_->symbols.create(&impl_->context, &impl_->api);
     if (result != MPP_OK || impl_->api == nullptr) {
@@ -338,9 +343,9 @@ Result<EncodedStreamInfo> MppRgaVideoEncoder::Open(const VideoEncoderConfig& con
     }
     if (result != MPP_OK) {
         impl_->Close();
-        return Result<EncodedStreamInfo>::Failure(MppRgaError(
-            "configure_encoder", result,
-            "MPP rejected H.264 encoder configuration at " + failed_step));
+        return Result<EncodedStreamInfo>::Failure(
+            MppRgaError("configure_encoder", result,
+                        "MPP rejected H.264 encoder configuration at " + failed_step));
     }
     impl_->open = true;
     impl_->flushed = false;
@@ -379,7 +384,7 @@ Result<std::vector<EncodedPacket>> MppRgaVideoEncoder::Encode(const VideoFrame& 
             impl_->rgb_buffer = nullptr;
         }
         const MPP_RET allocate = impl_->symbols.buffer_get(impl_->buffer_group, &impl_->rgb_buffer,
-                                                            rgb_bytes, "rkav", __func__);
+                                                           rgb_bytes, "rkav", __func__);
         if (allocate != MPP_OK || impl_->rgb_buffer == nullptr ||
             impl_->symbols.buffer_ptr(impl_->rgb_buffer, __func__) == nullptr) {
             impl_->rgb_buffer = nullptr;
@@ -407,18 +412,18 @@ Result<std::vector<EncodedPacket>> MppRgaVideoEncoder::Encode(const VideoFrame& 
             MppRgaError("convert", 0, "RGB/BGR stride is not a multiple of 3"));
     }
     const int source_wstride = frame.stride / 3;
-    const rga_buffer_t source = impl_->symbols.wrap_file_descriptor(
-        source_fd, frame.width, frame.height, source_wstride, frame.height,
-        impl_->source_rga_format);
-    const rga_buffer_t target = impl_->symbols.wrap_file_descriptor(
-        target_fd, impl_->width, impl_->height, impl_->stride, impl_->height,
-        RK_FORMAT_YCbCr_420_SP);
-    const IM_STATUS conversion = impl_->symbols.convert_color(
-        source, target, impl_->source_rga_format, RK_FORMAT_YCbCr_420_SP,
-        IM_COLOR_SPACE_DEFAULT, 1);
+    const rga_buffer_t source =
+        impl_->symbols.wrap_file_descriptor(source_fd, frame.width, frame.height, source_wstride,
+                                            frame.height, impl_->source_rga_format);
+    const rga_buffer_t target =
+        impl_->symbols.wrap_file_descriptor(target_fd, impl_->width, impl_->height, impl_->stride,
+                                            impl_->height, RK_FORMAT_YCbCr_420_SP);
+    const IM_STATUS conversion =
+        impl_->symbols.convert_color(source, target, impl_->source_rga_format,
+                                     RK_FORMAT_YCbCr_420_SP, IM_COLOR_SPACE_DEFAULT, 1);
     if (conversion != IM_STATUS_SUCCESS) {
-        return Result<std::vector<EncodedPacket>>::Failure(MppRgaError(
-            "rga_convert", conversion, "RGA RGB/BGR to NV12 conversion failed"));
+        return Result<std::vector<EncodedPacket>>::Failure(
+            MppRgaError("rga_convert", conversion, "RGA RGB/BGR to NV12 conversion failed"));
     }
     MppFrame mpp_frame{nullptr};
     MPP_RET result = impl_->symbols.frame_init(&mpp_frame);
@@ -464,7 +469,8 @@ Result<std::vector<EncodedPacket>> MppRgaVideoEncoder::Encode(const VideoFrame& 
         const auto found = impl_->sequences_by_pts.find(pts);
         EncodedPacket encoded;
         encoded.kind = StreamKind::kVideo;
-        encoded.source_sequence = found == impl_->sequences_by_pts.end() ? frame.sequence : found->second;
+        encoded.source_sequence =
+            found == impl_->sequences_by_pts.end() ? frame.sequence : found->second;
         encoded.pts = pts;
         encoded.dts = impl_->symbols.packet_get_dts(packet);
         encoded.duration = 1'000'000 / impl_->input.fps;

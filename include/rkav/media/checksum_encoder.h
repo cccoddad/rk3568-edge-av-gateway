@@ -23,7 +23,7 @@ class ChecksumVideoEncoder final : public IVideoEncoder {
     void Close() noexcept override;
 
    private:
-    std::mutex mutex_;  // 保护编码器状态，接口可从生命周期线程安全关闭。
+    std::mutex mutex_;           // 保护编码器状态，接口可从生命周期线程安全关闭。
     VideoEncoderConfig config_;  // 关键帧周期等配置。
     bool open_{false};           // 是否已 Open。
     bool flushed_{false};        // 是否已结束输入。

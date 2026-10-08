@@ -23,7 +23,7 @@ void SetPixel(VideoFrame& frame, int x, int y, unsigned char red, unsigned char 
     }
     const auto offset = static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride) +
                         static_cast<std::size_t>(x) * 3U;  // 目标 R 字节在 Buffer 中的偏移。
-    auto bytes = frame.buffer->writable_span();  // 不拥有内存的可写字节视图。
+    auto bytes = frame.buffer->writable_span();            // 不拥有内存的可写字节视图。
     bytes[offset] = static_cast<std::byte>(red);
     bytes[offset + 1U] = static_cast<std::byte>(green);
     bytes[offset + 2U] = static_cast<std::byte>(blue);

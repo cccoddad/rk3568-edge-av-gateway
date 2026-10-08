@@ -58,8 +58,8 @@ class MetricsRegistry {
 
     // 高频计数使用原子变量；需要成组更新的延迟窗口和队列快照使用同一把锁。
     std::array<std::atomic<std::uint64_t>, kCounterCount> counters_{};
-    const std::size_t latency_window_;  // 每个阶段的最大延迟样本数。
-    mutable std::mutex mutex_;          // 保护下面两个容器。
+    const std::size_t latency_window_;                           // 每个阶段的最大延迟样本数。
+    mutable std::mutex mutex_;                                   // 保护下面两个容器。
     std::map<std::string, std::vector<TimestampUs>> latencies_;  // 阶段名到微秒样本。
     std::map<std::string, QueueSnapshot> queues_;                // 队列名到最近快照。
 };
@@ -81,8 +81,8 @@ class WorkerHealth {
     [[nodiscard]] WorkerState state() const noexcept;
 
    private:
-    std::atomic<TimestampUs> last_progress_us_{0};  // 最近成功处理数据的微秒时刻。
-    std::atomic<TimestampUs> last_error_us_{0};     // 最近发生错误的微秒时刻。
+    std::atomic<TimestampUs> last_progress_us_{0};           // 最近成功处理数据的微秒时刻。
+    std::atomic<TimestampUs> last_error_us_{0};              // 最近发生错误的微秒时刻。
     std::atomic<std::uint64_t> consecutive_errors_{0};       // 自上次成功以来的错误数。
     std::atomic<WorkerState> state_{WorkerState::kStopped};  // 当前生命周期状态。
 };

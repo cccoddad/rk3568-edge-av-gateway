@@ -85,22 +85,22 @@ class Application {
     std::shared_ptr<IClock> clock_;  // 所有媒体和 worker 共享的时间源。
     MetricsRegistry metrics_;        // 全管道共享指标仓库。
     std::atomic<ApplicationState> state_{ApplicationState::kCreated};  // 生命周期状态。
-    std::atomic_bool stop_requested_{false};    // 是否已经请求停止。
-    mutable std::mutex status_mutex_;           // 保护停止原因和致命错误。
-    std::condition_variable status_condition_;  // 唤醒正在 Wait 的主线程。
-    std::string stop_reason_{"not_stopped"};    // 第一个停止原因。
-    std::optional<Error> fatal_error_;          // 第一个致命错误。
+    std::atomic_bool stop_requested_{false};                           // 是否已经请求停止。
+    mutable std::mutex status_mutex_;                                  // 保护停止原因和致命错误。
+    std::condition_variable status_condition_;                         // 唤醒正在 Wait 的主线程。
+    std::string stop_reason_{"not_stopped"};                           // 第一个停止原因。
+    std::optional<Error> fatal_error_;                                 // 第一个致命错误。
 
-    std::unique_ptr<IVideoCapture> video_capture_;  // 视频采集后端唯一所有者。
-    std::unique_ptr<IAudioCapture> audio_capture_;  // 音频采集后端唯一所有者。
-    std::unique_ptr<IInferenceEngine> inference_;   // 推理后端唯一所有者。
-    std::unique_ptr<IVideoDecoder> video_decoder_;  // 可选压缩帧解码器唯一所有者。
+    std::unique_ptr<IVideoCapture> video_capture_;         // 视频采集后端唯一所有者。
+    std::unique_ptr<IAudioCapture> audio_capture_;         // 音频采集后端唯一所有者。
+    std::unique_ptr<IInferenceEngine> inference_;          // 推理后端唯一所有者。
+    std::unique_ptr<IVideoDecoder> video_decoder_;         // 可选压缩帧解码器唯一所有者。
     std::unique_ptr<IVideoDecoder> video_encode_decoder_;  // 软件编码支路独占解码器。
-    std::unique_ptr<IOverlay> overlay_;                     // 可选 CPU/RGA 像素叠加器。
-    std::unique_ptr<IVideoEncoder> video_encoder_;  // 视频编码器唯一所有者。
-    std::unique_ptr<IAudioEncoder> audio_encoder_;  // 音频编码器唯一所有者。
-    std::unique_ptr<PacketRouter> router_;          // 编码包输出路由器。
-    std::vector<EncodedStreamInfo> encoded_streams_;  // Sink 建流所需的音视频描述。
+    std::unique_ptr<IOverlay> overlay_;                    // 可选 CPU/RGA 像素叠加器。
+    std::unique_ptr<IVideoEncoder> video_encoder_;         // 视频编码器唯一所有者。
+    std::unique_ptr<IAudioEncoder> audio_encoder_;         // 音频编码器唯一所有者。
+    std::unique_ptr<PacketRouter> router_;                 // 编码包输出路由器。
+    std::vector<EncodedStreamInfo> encoded_streams_;       // Sink 建流所需的音视频描述。
 
     std::unique_ptr<BoundedQueue<VideoFrame>> inference_queue_;     // 等待推理的视频帧。
     std::unique_ptr<BoundedQueue<VideoFrame>> video_encode_queue_;  // 等待编码的视频帧。
@@ -119,8 +119,8 @@ class Application {
     WorkerHealth video_encode_health_;   // 视频编码 worker 健康状态。
     WorkerHealth audio_encode_health_;   // 音频编码 worker 健康状态。
 
-    mutable std::mutex detection_mutex_;  // 保护最新检测结果指针的替换和复制。
-    std::condition_variable detection_condition_;  // 通知等待精确来源帧结果的 OSD。
+    mutable std::mutex detection_mutex_;                      // 保护最新检测结果指针的替换和复制。
+    std::condition_variable detection_condition_;             // 通知等待精确来源帧结果的 OSD。
     std::shared_ptr<const DetectionBatch> latest_detection_;  // 不可变检测结果快照。
 };
 

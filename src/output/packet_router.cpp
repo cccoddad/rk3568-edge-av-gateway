@@ -15,8 +15,8 @@ struct PacketRouter::SinkWorker {
     OutputConfig config;                // 当前输出的独立配置。
     std::unique_ptr<IPacketSink> sink;  // 具体输出实现的唯一所有权。
     std::unique_ptr<BoundedQueue<std::shared_ptr<const EncodedPacket>>> queue;  // 包队列。
-    std::jthread thread;  // 唯一调用该 Sink::Write 的消费线程。
-    WorkerHealth health;  // 输出线程的进展和错误状态。
+    std::jthread thread;                      // 唯一调用该 Sink::Write 的消费线程。
+    WorkerHealth health;                      // 输出线程的进展和错误状态。
     std::atomic_bool abort_requested{false};  // Abort 路径禁止写完整文件 trailer。
     TimestampUs last_retryable_report_us{0};  // 上次上报可重试错误的时刻，用于节流。
 };
@@ -90,9 +90,9 @@ Result<void> PacketRouter::Start() {
                             target->last_retryable_report_us = now_us;
                             metrics_.Increment(MetricCounter::kErrors);
                             target->health.SetState(WorkerState::kDegraded);
-                            Logger::Instance().Log(LogLevel::kWarn, "packet_router",
-                                                   "sink_write_retry", DescribeError(result.error()),
-                                                   {{"sink", target->sink->name()}});
+                            Logger::Instance().Log(
+                                LogLevel::kWarn, "packet_router", "sink_write_retry",
+                                DescribeError(result.error()), {{"sink", target->sink->name()}});
                         }
                         continue;
                     }
@@ -165,8 +165,12 @@ void PacketRouter::Submit(std::shared_ptr<const EncodedPacket> packet) {
         } else if (worker->config.required && status != QueueStatus::kClosed &&
                    status != QueueStatus::kCancelled) {
             metrics_.Increment(MetricCounter::kErrors);
-            const Error error{ErrorCategory::kResourceExhausted, 0, "packet_router", "submit",
-                              "required sink queue rejected an encoded packet", false};
+            const Error error{ErrorCategory::kResourceExhausted,
+                              0,
+                              "packet_router",
+                              "submit",
+                              "required sink queue rejected an encoded packet",
+                              false};
             {
                 std::scoped_lock lock(error_mutex_);
                 if (!fatal_error_.has_value()) {

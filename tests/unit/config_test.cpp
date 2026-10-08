@@ -294,8 +294,7 @@ TEST(ConfigTest, RtspTransportAndTimeoutAreAcceptedForRtspOutput) {
 
 // 传输协议只允许 tcp 或 udp。
 TEST(ConfigTest, RejectsUnknownRtspTransportValue) {
-    auto parsed =
-        ConfigLoader::Parse(R"({"outputs":[{"type":"null","rtsp_transport":"sctp"}]})");
+    auto parsed = ConfigLoader::Parse(R"({"outputs":[{"type":"null","rtsp_transport":"sctp"}]})");
     ASSERT_FALSE(parsed);
     EXPECT_EQ(parsed.error().operation, "outputs[0].rtsp_transport");
 }
@@ -309,8 +308,7 @@ TEST(ConfigTest, RejectsTransportOverrideOnNonRtspOutput) {
 
 // 超出 [0, 60000] 范围的 RTSP 超时必须被拒绝。
 TEST(ConfigTest, RejectsOutOfRangeRtspTimeout) {
-    auto parsed =
-        ConfigLoader::Parse(R"({"outputs":[{"type":"null","rtsp_timeout_ms":70000}]})");
+    auto parsed = ConfigLoader::Parse(R"({"outputs":[{"type":"null","rtsp_timeout_ms":70000}]})");
     ASSERT_FALSE(parsed);
     EXPECT_EQ(parsed.error().operation, "outputs[0].rtsp_timeout_ms");
 }

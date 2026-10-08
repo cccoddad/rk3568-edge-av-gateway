@@ -29,11 +29,11 @@ class ValidatingNullSink final : public IPacketSink {
     /// 分别校验视频和音频 DTS 不倒退。
     Result<void> ValidateTimestamp(const EncodedPacket& packet);
 
-    std::mutex mutex_;               // 保护以下 Sink 状态。
-    OutputConfig config_;            // Open 后生效的配置快照。
-    bool open_{false};               // 是否已经打开。
-    bool flushed_{false};            // 是否已经完成 Flush。
-    std::uint64_t packet_count_{0};  // 已成功消费包数，用于故障注入位置。
+    std::mutex mutex_;                            // 保护以下 Sink 状态。
+    OutputConfig config_;                         // Open 后生效的配置快照。
+    bool open_{false};                            // 是否已经打开。
+    bool flushed_{false};                         // 是否已经完成 Flush。
+    std::uint64_t packet_count_{0};               // 已成功消费包数，用于故障注入位置。
     std::optional<std::int64_t> last_video_dts_;  // 上一个视频包 DTS。
     std::optional<std::int64_t> last_audio_dts_;  // 上一个音频包 DTS。
 };

@@ -32,7 +32,7 @@ TimestampUs Percentile(std::vector<TimestampUs> values, double percentile) {
     // 在快照副本上排序，不改变正在收集的原始窗口。
     std::sort(values.begin(), values.end());
     const double position =
-        percentile * static_cast<double>(values.size() - 1U);  // 百分位对应浮点位置。
+        percentile * static_cast<double>(values.size() - 1U);             // 百分位对应浮点位置。
     const auto index = static_cast<std::size_t>(std::llround(position));  // 最近样本索引。
     return values[index];
 }

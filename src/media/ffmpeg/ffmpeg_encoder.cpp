@@ -35,7 +35,7 @@ Error FfmpegError(std::string_view module, std::string_view operation, int code,
         message += detail.data();
     }
     return Error{ErrorCategory::kCodec, code, std::string(module), std::string(operation),
-                 std::move(message), false};
+                 std::move(message),    false};
 }
 
 AVPixelFormat ToAvPixelFormat(PixelFormat format) {
@@ -75,9 +75,9 @@ Result<std::vector<EncodedPacket>> ReceivePackets(
         if (packet->size <= 0 || packet->data == nullptr || packet->pts == AV_NOPTS_VALUE ||
             packet->dts == AV_NOPTS_VALUE) {
             av_packet_free(&packet);
-            return Result<std::vector<EncodedPacket>>::Failure(FfmpegError(
-                "ffmpeg_encoder", "receive_packet", AVERROR_INVALIDDATA,
-                "encoder returned an empty packet or missing timestamp"));
+            return Result<std::vector<EncodedPacket>>::Failure(
+                FfmpegError("ffmpeg_encoder", "receive_packet", AVERROR_INVALIDDATA,
+                            "encoder returned an empty packet or missing timestamp"));
         }
 
         auto payload = Buffer::Allocate(static_cast<std::size_t>(packet->size));
@@ -145,16 +145,17 @@ Result<EncodedStreamInfo> FfmpegVideoEncoder::Open(const VideoEncoderConfig& con
             "ffmpeg_video_encoder", "open", AVERROR(EINVAL), "encoder is already open"));
     }
     const AVPixelFormat source_format = ToAvPixelFormat(input.format);
-    if (source_format == AV_PIX_FMT_NONE || input.width <= 0 || input.height <= 0 || input.fps <= 0) {
-        return Result<EncodedStreamInfo>::Failure(FfmpegError(
-            "ffmpeg_video_encoder", "open", AVERROR(EINVAL),
-            "software H.264 input must be negotiated RGB888 or BGR888"));
+    if (source_format == AV_PIX_FMT_NONE || input.width <= 0 || input.height <= 0 ||
+        input.fps <= 0) {
+        return Result<EncodedStreamInfo>::Failure(
+            FfmpegError("ffmpeg_video_encoder", "open", AVERROR(EINVAL),
+                        "software H.264 input must be negotiated RGB888 or BGR888"));
     }
     const AVCodec* codec = avcodec_find_encoder_by_name(config.codec_name.c_str());
     if (codec == nullptr || codec->type != AVMEDIA_TYPE_VIDEO || codec->id != AV_CODEC_ID_H264) {
-        return Result<EncodedStreamInfo>::Failure(FfmpegError(
-            "ffmpeg_video_encoder", "find_encoder", AVERROR_ENCODER_NOT_FOUND,
-            "configured FFmpeg encoder is not an H.264 encoder: " + config.codec_name));
+        return Result<EncodedStreamInfo>::Failure(
+            FfmpegError("ffmpeg_video_encoder", "find_encoder", AVERROR_ENCODER_NOT_FOUND,
+                        "configured FFmpeg encoder is not an H.264 encoder: " + config.codec_name));
     }
 
     impl_->context = avcodec_alloc_context3(codec);
@@ -183,8 +184,8 @@ Result<EncodedStreamInfo> FfmpegVideoEncoder::Open(const VideoEncoderConfig& con
     av_dict_free(&options);
     if (opened < 0) {
         impl_->Close();
-        return Result<EncodedStreamInfo>::Failure(FfmpegError(
-            "ffmpeg_video_encoder", "open_codec", opened, "cannot open H.264 encoder"));
+        return Result<EncodedStreamInfo>::Failure(
+            FfmpegError("ffmpeg_video_encoder", "open_codec", opened, "cannot open H.264 encoder"));
     }
 
     impl_->frame->format = impl_->context->pix_fmt;
@@ -193,18 +194,18 @@ Result<EncodedStreamInfo> FfmpegVideoEncoder::Open(const VideoEncoderConfig& con
     const int frame_buffer = av_frame_get_buffer(impl_->frame, 32);
     if (frame_buffer < 0) {
         impl_->Close();
-        return Result<EncodedStreamInfo>::Failure(FfmpegError(
-            "ffmpeg_video_encoder", "allocate_frame", frame_buffer,
-            "cannot allocate YUV420P frame"));
+        return Result<EncodedStreamInfo>::Failure(FfmpegError("ffmpeg_video_encoder",
+                                                              "allocate_frame", frame_buffer,
+                                                              "cannot allocate YUV420P frame"));
     }
-    impl_->scaler = sws_getContext(input.width, input.height, source_format, input.width,
-                                   input.height, AV_PIX_FMT_YUV420P, SWS_BILINEAR, nullptr, nullptr,
-                                   nullptr);
+    impl_->scaler =
+        sws_getContext(input.width, input.height, source_format, input.width, input.height,
+                       AV_PIX_FMT_YUV420P, SWS_BILINEAR, nullptr, nullptr, nullptr);
     if (impl_->scaler == nullptr) {
         impl_->Close();
-        return Result<EncodedStreamInfo>::Failure(FfmpegError(
-            "ffmpeg_video_encoder", "create_scaler", AVERROR(EINVAL),
-            "cannot create RGB to YUV420P converter"));
+        return Result<EncodedStreamInfo>::Failure(
+            FfmpegError("ffmpeg_video_encoder", "create_scaler", AVERROR(EINVAL),
+                        "cannot create RGB to YUV420P converter"));
     }
 
     impl_->input = input;
@@ -233,24 +234,24 @@ Result<std::vector<EncodedPacket>> FfmpegVideoEncoder::Encode(const VideoFrame& 
     }
     if (frame.width != impl_->input.width || frame.height != impl_->input.height ||
         frame.format != impl_->input.format) {
-        return Result<std::vector<EncodedPacket>>::Failure(FfmpegError(
-            "ffmpeg_video_encoder", "encode", AVERROR(EINVAL),
-            "video frame does not match negotiated encoder input"));
+        return Result<std::vector<EncodedPacket>>::Failure(
+            FfmpegError("ffmpeg_video_encoder", "encode", AVERROR(EINVAL),
+                        "video frame does not match negotiated encoder input"));
     }
     const int writable = av_frame_make_writable(impl_->frame);
     if (writable < 0) {
         return Result<std::vector<EncodedPacket>>::Failure(FfmpegError(
             "ffmpeg_video_encoder", "make_writable", writable, "YUV frame is not writable"));
     }
-    const std::uint8_t* source_data[4]{
-        reinterpret_cast<const std::uint8_t*>(frame.buffer->data()), nullptr, nullptr, nullptr};
+    const std::uint8_t* source_data[4]{reinterpret_cast<const std::uint8_t*>(frame.buffer->data()),
+                                       nullptr, nullptr, nullptr};
     const int source_linesize[4]{frame.stride, 0, 0, 0};
     const int scaled = sws_scale(impl_->scaler, source_data, source_linesize, 0, frame.height,
                                  impl_->frame->data, impl_->frame->linesize);
     if (scaled != frame.height) {
-        return Result<std::vector<EncodedPacket>>::Failure(FfmpegError(
-            "ffmpeg_video_encoder", "convert", AVERROR_INVALIDDATA,
-            "RGB to YUV conversion returned an incomplete frame"));
+        return Result<std::vector<EncodedPacket>>::Failure(
+            FfmpegError("ffmpeg_video_encoder", "convert", AVERROR_INVALIDDATA,
+                        "RGB to YUV conversion returned an incomplete frame"));
     }
     impl_->frame->pts = frame.pts_us;
     impl_->sequences_by_pts[impl_->frame->pts] = frame.sequence;
@@ -261,17 +262,16 @@ Result<std::vector<EncodedPacket>> FfmpegVideoEncoder::Encode(const VideoFrame& 
         return Result<std::vector<EncodedPacket>>::Failure(FfmpegError(
             "ffmpeg_video_encoder", "send_frame", sent, "H.264 encoder rejected a frame"));
     }
-    return ReceivePackets(
-        impl_->context, StreamKind::kVideo, Codec::kH264,
-        [this](std::int64_t pts) {
-            const auto found = impl_->sequences_by_pts.find(pts);
-            if (found == impl_->sequences_by_pts.end()) {
-                return impl_->last_sequence;
-            }
-            const std::uint64_t sequence = found->second;
-            impl_->sequences_by_pts.erase(found);
-            return sequence;
-        });
+    return ReceivePackets(impl_->context, StreamKind::kVideo, Codec::kH264,
+                          [this](std::int64_t pts) {
+                              const auto found = impl_->sequences_by_pts.find(pts);
+                              if (found == impl_->sequences_by_pts.end()) {
+                                  return impl_->last_sequence;
+                              }
+                              const std::uint64_t sequence = found->second;
+                              impl_->sequences_by_pts.erase(found);
+                              return sequence;
+                          });
 }
 
 Result<std::vector<EncodedPacket>> FfmpegVideoEncoder::Flush() {
@@ -283,8 +283,8 @@ Result<std::vector<EncodedPacket>> FfmpegVideoEncoder::Flush() {
     impl_->flushed = true;
     const int sent = avcodec_send_frame(impl_->context, nullptr);
     if (sent < 0 && sent != AVERROR_EOF) {
-        return Result<std::vector<EncodedPacket>>::Failure(FfmpegError(
-            "ffmpeg_video_encoder", "flush", sent, "cannot start H.264 drain"));
+        return Result<std::vector<EncodedPacket>>::Failure(
+            FfmpegError("ffmpeg_video_encoder", "flush", sent, "cannot start H.264 drain"));
     }
     return ReceivePackets(impl_->context, StreamKind::kVideo, Codec::kH264,
                           [this](std::int64_t pts) {
@@ -330,9 +330,9 @@ struct FfmpegAudioEncoder::Impl {
     Result<void> QueueConverted(const std::uint8_t* input_data, int input_samples) {
         const int capacity = swr_get_out_samples(resampler, input_samples);
         if (capacity < 0) {
-            return Result<void>::Failure(FfmpegError(
-                "ffmpeg_audio_encoder", "resample_capacity", capacity,
-                "cannot calculate converted sample capacity"));
+            return Result<void>::Failure(FfmpegError("ffmpeg_audio_encoder", "resample_capacity",
+                                                     capacity,
+                                                     "cannot calculate converted sample capacity"));
         }
         if (capacity == 0) {
             return Result<void>::Success();
@@ -342,9 +342,9 @@ struct FfmpegAudioEncoder::Impl {
         const int allocated = av_samples_alloc_array_and_samples(
             &converted, &line_size, context->channels, capacity, context->sample_fmt, 0);
         if (allocated < 0) {
-            return Result<void>::Failure(FfmpegError(
-                "ffmpeg_audio_encoder", "allocate_samples", allocated,
-                "cannot allocate converted audio samples"));
+            return Result<void>::Failure(FfmpegError("ffmpeg_audio_encoder", "allocate_samples",
+                                                     allocated,
+                                                     "cannot allocate converted audio samples"));
         }
         const std::uint8_t* source[1]{input_data};
         const int converted_count =
@@ -353,19 +353,20 @@ struct FfmpegAudioEncoder::Impl {
         if (converted_count < 0) {
             av_freep(&converted[0]);
             av_freep(&converted);
-            return Result<void>::Failure(FfmpegError(
-                "ffmpeg_audio_encoder", "convert", converted_count,
-                "cannot convert PCM sample format"));
+            return Result<void>::Failure(FfmpegError("ffmpeg_audio_encoder", "convert",
+                                                     converted_count,
+                                                     "cannot convert PCM sample format"));
         }
         if (converted_count > 0) {
-            const int resized = av_audio_fifo_realloc(fifo, av_audio_fifo_size(fifo) + converted_count);
+            const int resized =
+                av_audio_fifo_realloc(fifo, av_audio_fifo_size(fifo) + converted_count);
             if (resized < 0 || av_audio_fifo_write(fifo, reinterpret_cast<void**>(converted),
-                                                  converted_count) != converted_count) {
+                                                   converted_count) != converted_count) {
                 av_freep(&converted[0]);
                 av_freep(&converted);
-                return Result<void>::Failure(FfmpegError(
-                    "ffmpeg_audio_encoder", "queue_samples",
-                    resized < 0 ? resized : AVERROR(ENOMEM), "cannot append samples to audio FIFO"));
+                return Result<void>::Failure(FfmpegError("ffmpeg_audio_encoder", "queue_samples",
+                                                         resized < 0 ? resized : AVERROR(ENOMEM),
+                                                         "cannot append samples to audio FIFO"));
             }
         }
         av_freep(&converted[0]);
@@ -378,9 +379,9 @@ struct FfmpegAudioEncoder::Impl {
         const int samples_to_read = std::min(available, frame_samples);
         AVFrame* frame = av_frame_alloc();
         if (frame == nullptr) {
-            return Result<std::vector<EncodedPacket>>::Failure(FfmpegError(
-                "ffmpeg_audio_encoder", "allocate_frame", AVERROR(ENOMEM),
-                "cannot allocate AAC frame"));
+            return Result<std::vector<EncodedPacket>>::Failure(
+                FfmpegError("ffmpeg_audio_encoder", "allocate_frame", AVERROR(ENOMEM),
+                            "cannot allocate AAC frame"));
         }
         frame->nb_samples = frame_samples;
         frame->format = context->sample_fmt;
@@ -390,24 +391,24 @@ struct FfmpegAudioEncoder::Impl {
         const int allocated = av_frame_get_buffer(frame, 0);
         if (allocated < 0) {
             av_frame_free(&frame);
-            return Result<std::vector<EncodedPacket>>::Failure(FfmpegError(
-                "ffmpeg_audio_encoder", "allocate_frame", allocated,
-                "cannot allocate AAC frame samples"));
+            return Result<std::vector<EncodedPacket>>::Failure(
+                FfmpegError("ffmpeg_audio_encoder", "allocate_frame", allocated,
+                            "cannot allocate AAC frame samples"));
         }
         if (av_audio_fifo_read(fifo, reinterpret_cast<void**>(frame->data), samples_to_read) !=
             samples_to_read) {
             av_frame_free(&frame);
-            return Result<std::vector<EncodedPacket>>::Failure(FfmpegError(
-                "ffmpeg_audio_encoder", "read_fifo", AVERROR_INVALIDDATA,
-                "cannot read the requested PCM samples"));
+            return Result<std::vector<EncodedPacket>>::Failure(
+                FfmpegError("ffmpeg_audio_encoder", "read_fifo", AVERROR_INVALIDDATA,
+                            "cannot read the requested PCM samples"));
         }
         if (samples_to_read < frame_samples) {
             if (!allow_padding) {
                 frame->nb_samples = samples_to_read;
             } else {
                 av_samples_set_silence(frame->data, samples_to_read,
-                                       frame_samples - samples_to_read,
-                                       context->channels, context->sample_fmt);
+                                       frame_samples - samples_to_read, context->channels,
+                                       context->sample_fmt);
             }
         }
         frame->pts = next_encoded_pts;
@@ -434,21 +435,21 @@ Result<EncodedStreamInfo> FfmpegAudioEncoder::Open(const AudioEncoderConfig& con
             "ffmpeg_audio_encoder", "open", AVERROR(EINVAL), "encoder is already open"));
     }
     if (input.format != SampleFormat::kS16LE || input.sample_rate <= 0 || input.channels <= 0) {
-        return Result<EncodedStreamInfo>::Failure(FfmpegError(
-            "ffmpeg_audio_encoder", "open", AVERROR(EINVAL),
-            "software AAC input must be negotiated S16_LE PCM"));
+        return Result<EncodedStreamInfo>::Failure(
+            FfmpegError("ffmpeg_audio_encoder", "open", AVERROR(EINVAL),
+                        "software AAC input must be negotiated S16_LE PCM"));
     }
     const AVCodec* codec = avcodec_find_encoder_by_name(config.codec_name.c_str());
     if (codec == nullptr || codec->type != AVMEDIA_TYPE_AUDIO || codec->id != AV_CODEC_ID_AAC) {
-        return Result<EncodedStreamInfo>::Failure(FfmpegError(
-            "ffmpeg_audio_encoder", "find_encoder", AVERROR_ENCODER_NOT_FOUND,
-            "configured FFmpeg encoder is not an AAC encoder: " + config.codec_name));
+        return Result<EncodedStreamInfo>::Failure(
+            FfmpegError("ffmpeg_audio_encoder", "find_encoder", AVERROR_ENCODER_NOT_FOUND,
+                        "configured FFmpeg encoder is not an AAC encoder: " + config.codec_name));
     }
     impl_->context = avcodec_alloc_context3(codec);
     if (impl_->context == nullptr) {
-        return Result<EncodedStreamInfo>::Failure(FfmpegError(
-            "ffmpeg_audio_encoder", "allocate", AVERROR(ENOMEM),
-            "cannot allocate AAC encoder context"));
+        return Result<EncodedStreamInfo>::Failure(
+            FfmpegError("ffmpeg_audio_encoder", "allocate", AVERROR(ENOMEM),
+                        "cannot allocate AAC encoder context"));
     }
     impl_->context->bit_rate = config.bitrate_bps;
     impl_->context->sample_rate = input.sample_rate;
@@ -461,29 +462,28 @@ Result<EncodedStreamInfo> FfmpegAudioEncoder::Open(const AudioEncoderConfig& con
     const int opened = avcodec_open2(impl_->context, codec, nullptr);
     if (opened < 0) {
         impl_->Close();
-        return Result<EncodedStreamInfo>::Failure(FfmpegError(
-            "ffmpeg_audio_encoder", "open_codec", opened, "cannot open AAC encoder"));
+        return Result<EncodedStreamInfo>::Failure(
+            FfmpegError("ffmpeg_audio_encoder", "open_codec", opened, "cannot open AAC encoder"));
     }
 
     const std::int64_t input_layout = av_get_default_channel_layout(input.channels);
-    impl_->resampler = swr_alloc_set_opts(
-        nullptr, static_cast<std::int64_t>(impl_->context->channel_layout),
-        impl_->context->sample_fmt, impl_->context->sample_rate, input_layout, AV_SAMPLE_FMT_S16,
-        input.sample_rate, 0, nullptr);
+    impl_->resampler =
+        swr_alloc_set_opts(nullptr, static_cast<std::int64_t>(impl_->context->channel_layout),
+                           impl_->context->sample_fmt, impl_->context->sample_rate, input_layout,
+                           AV_SAMPLE_FMT_S16, input.sample_rate, 0, nullptr);
     int created = impl_->resampler == nullptr ? AVERROR(ENOMEM) : swr_init(impl_->resampler);
     if (created < 0) {
         impl_->Close();
-        return Result<EncodedStreamInfo>::Failure(FfmpegError(
-            "ffmpeg_audio_encoder", "create_resampler", created,
-            "cannot create S16 to encoder sample converter"));
+        return Result<EncodedStreamInfo>::Failure(
+            FfmpegError("ffmpeg_audio_encoder", "create_resampler", created,
+                        "cannot create S16 to encoder sample converter"));
     }
-    impl_->fifo = av_audio_fifo_alloc(impl_->context->sample_fmt,
-                                      impl_->context->channels, 1);
+    impl_->fifo = av_audio_fifo_alloc(impl_->context->sample_fmt, impl_->context->channels, 1);
     if (impl_->fifo == nullptr) {
         impl_->Close();
-        return Result<EncodedStreamInfo>::Failure(FfmpegError(
-            "ffmpeg_audio_encoder", "create_fifo", AVERROR(ENOMEM),
-            "cannot allocate bounded AAC reframe buffer"));
+        return Result<EncodedStreamInfo>::Failure(
+            FfmpegError("ffmpeg_audio_encoder", "create_fifo", AVERROR(ENOMEM),
+                        "cannot allocate bounded AAC reframe buffer"));
     }
 
     impl_->input = input;
@@ -515,15 +515,14 @@ Result<std::vector<EncodedPacket>> FfmpegAudioEncoder::Encode(const AudioFrame& 
     }
     if (frame.sample_rate != impl_->input.sample_rate || frame.channels != impl_->input.channels ||
         frame.format != impl_->input.format) {
-        return Result<std::vector<EncodedPacket>>::Failure(FfmpegError(
-            "ffmpeg_audio_encoder", "encode", AVERROR(EINVAL),
-            "audio frame does not match negotiated encoder input"));
+        return Result<std::vector<EncodedPacket>>::Failure(
+            FfmpegError("ffmpeg_audio_encoder", "encode", AVERROR(EINVAL),
+                        "audio frame does not match negotiated encoder input"));
     }
-    if (impl_->expected_next_pts_us.has_value() &&
-        frame.pts_us != *impl_->expected_next_pts_us) {
-        return Result<std::vector<EncodedPacket>>::Failure(FfmpegError(
-            "ffmpeg_audio_encoder", "timestamp", AVERROR_INVALIDDATA,
-            "audio PTS is not continuous"));
+    if (impl_->expected_next_pts_us.has_value() && frame.pts_us != *impl_->expected_next_pts_us) {
+        return Result<std::vector<EncodedPacket>>::Failure(
+            FfmpegError("ffmpeg_audio_encoder", "timestamp", AVERROR_INVALIDDATA,
+                        "audio PTS is not continuous"));
     }
     const TimestampUs duration_us =
         static_cast<TimestampUs>(frame.samples_per_channel) * 1'000'000 / frame.sample_rate;
@@ -533,8 +532,8 @@ Result<std::vector<EncodedPacket>> FfmpegAudioEncoder::Encode(const AudioFrame& 
             av_rescale_q(frame.pts_us, AVRational{1, 1'000'000}, impl_->context->time_base);
         impl_->have_pts = true;
     }
-    auto queued = impl_->QueueConverted(
-        reinterpret_cast<const std::uint8_t*>(frame.buffer->data()), frame.samples_per_channel);
+    auto queued = impl_->QueueConverted(reinterpret_cast<const std::uint8_t*>(frame.buffer->data()),
+                                        frame.samples_per_channel);
     if (!queued) {
         return Result<std::vector<EncodedPacket>>::Failure(queued.error());
     }
@@ -582,8 +581,8 @@ Result<std::vector<EncodedPacket>> FfmpegAudioEncoder::Flush() {
     }
     const int sent = avcodec_send_frame(impl_->context, nullptr);
     if (sent < 0 && sent != AVERROR_EOF) {
-        return Result<std::vector<EncodedPacket>>::Failure(FfmpegError(
-            "ffmpeg_audio_encoder", "flush", sent, "cannot start AAC drain"));
+        return Result<std::vector<EncodedPacket>>::Failure(
+            FfmpegError("ffmpeg_audio_encoder", "flush", sent, "cannot start AAC drain"));
     }
     auto drained = ReceivePackets(impl_->context, StreamKind::kAudio, Codec::kAac,
                                   [this](std::int64_t) { return impl_->packet_sequence++; });

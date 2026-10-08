@@ -37,7 +37,7 @@ struct VideoFrame {
     TimestampUs pts_us{0};      // 统一单调时间轴上的显示时间，单位微秒。
     int width{0};               // 有效图像宽度，单位像素。
     int height{0};              // 有效图像高度，单位像素。
-    int stride{0};  // 每行实际占用字节数，可能大于 width * 每像素字节数。
+    int stride{0};              // 每行实际占用字节数，可能大于 width * 每像素字节数。
     PixelFormat format{PixelFormat::kUnknown};  // 像素排列格式。
     std::shared_ptr<Buffer> buffer;             // 像素数据共享所有权。
     FrameMemory memory;                         // CPU/DMA/MPP 内存来源描述。

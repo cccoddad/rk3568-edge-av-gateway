@@ -27,7 +27,7 @@ Result<TransformMetadata> ComputeLetterboxTransform(int source_width, int source
         static_cast<int>(std::lround(source_width * requested_scale)), 1, destination_width);
     const int resized_height = std::clamp(
         static_cast<int>(std::lround(source_height * requested_scale)), 1, destination_height);
-    const int remaining_width = destination_width - resized_width;  // 水平剩余补边总宽。
+    const int remaining_width = destination_width - resized_width;     // 水平剩余补边总宽。
     const int remaining_height = destination_height - resized_height;  // 垂直剩余补边总高。
 
     return Result<TransformMetadata>::Success(

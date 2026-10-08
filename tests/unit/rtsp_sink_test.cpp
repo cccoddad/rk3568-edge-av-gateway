@@ -1,13 +1,12 @@
 // 文件作用：验证 RTSP 网络输出 Sink 的工厂创建、URL 校验、流契约和重连等待语义。
 // 主要知识点：FFmpeg RTSP muxer 使用约束、工厂模式、输入校验顺序和可重试错误。
-#include "rkav/output/sinks.h"
+#include <gtest/gtest.h>
 
 #include <array>
 #include <string>
 
-#include <gtest/gtest.h>
-
 #include "rkav/common/buffer.h"
+#include "rkav/output/sinks.h"
 
 namespace rkav {
 namespace {

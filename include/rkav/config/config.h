@@ -28,15 +28,15 @@ struct VideoFailureConfig {
 };
 
 struct VideoConfig {
-    std::string backend{"mock"};               // 视频后端名称。
-    std::string device{"/dev/video0"};         // V4L2 设备节点；Mock 后端忽略。
-    int width{1280};                           // 帧宽，单位像素。
-    int height{720};                           // 帧高，单位像素。
-    int fps{30};                               // 目标帧率。
-    PixelFormat format{PixelFormat::kRgb888};  // 期望像素格式。
-    int capture_timeout_ms{1000};              // V4L2 等待一帧的最长时间。
-    std::size_t mmap_buffer_count{4};          // V4L2 驱动 MMAP 缓冲数量。
-    std::size_t queue_capacity{4};             // 视频编码队列最多容纳的帧数。
+    std::string backend{"mock"};                                  // 视频后端名称。
+    std::string device{"/dev/video0"};                            // V4L2 设备节点；Mock 后端忽略。
+    int width{1280};                                              // 帧宽，单位像素。
+    int height{720};                                              // 帧高，单位像素。
+    int fps{30};                                                  // 目标帧率。
+    PixelFormat format{PixelFormat::kRgb888};                     // 期望像素格式。
+    int capture_timeout_ms{1000};                                 // V4L2 等待一帧的最长时间。
+    std::size_t mmap_buffer_count{4};                             // V4L2 驱动 MMAP 缓冲数量。
+    std::size_t queue_capacity{4};                                // 视频编码队列最多容纳的帧数。
     OverflowPolicy overflow_policy{OverflowPolicy::kDropOldest};  // 满队列处理方式。
     std::string pattern{"moving_box"};                            // Mock 测试图样式。
     bool realtime{true};         // false 时不等待真实节拍，主要供单元测试使用。
@@ -50,10 +50,10 @@ struct AudioFailureConfig {
 };
 
 struct AudioConfig {
-    std::string backend{"mock"};   // 音频后端名称：mock 或 alsa。
-    std::string device{"hw:0,0"};  // ALSA 设备，格式 hw:CARD,DEVICE；Mock 后端忽略。
-    int sample_rate{48000};        // 每秒每声道采样点数，单位 Hz。
-    int channels{1};               // 声道数。
+    std::string backend{"mock"};                // 音频后端名称：mock 或 alsa。
+    std::string device{"hw:0,0"};               // ALSA 设备，格式 hw:CARD,DEVICE；Mock 后端忽略。
+    int sample_rate{48000};                     // 每秒每声道采样点数，单位 Hz。
+    int channels{1};                            // 声道数。
     SampleFormat format{SampleFormat::kS16LE};  // PCM 样本格式。
     int frame_duration_ms{20};                  // 每个 AudioFrame 覆盖的时长。
     int capture_timeout_ms{1000};               // ALSA 等待一个 PCM 块的最长时间。
@@ -78,30 +78,30 @@ struct InferenceConfig {
     std::size_t max_detections{100};       // 单帧最多返回的检测框数量。
     std::size_t queue_capacity{1};         // 等待推理的视频帧数上限。
     OverflowPolicy overflow_policy{OverflowPolicy::kKeepLatest};  // 推理积压处理方式。
-    int max_result_age_ms{200};  // 检测结果超过该年龄视为过期。
+    int max_result_age_ms{200};                                   // 检测结果超过该年龄视为过期。
 };
 
 struct OverlayConfig {
-    bool enabled{false};          // false 时不复制像素、不绘制任何 OSD。
+    bool enabled{false};         // false 时不复制像素、不绘制任何 OSD。
     std::string backend{"cpu"};  // 当前仅支持 cpu；后续 RGA 保持相同配置契约。
-    int line_width{2};            // 检测框边线像素宽度。
-    bool draw_labels{true};       // 是否绘制类别 ID 和置信度文字。
-    int wait_for_result_ms{80};   // 仅对已送推理的帧等待其精确结果的最长时间。
+    int line_width{2};           // 检测框边线像素宽度。
+    bool draw_labels{true};      // 是否绘制类别 ID 和置信度文字。
+    int wait_for_result_ms{80};  // 仅对已送推理的帧等待其精确结果的最长时间。
 };
 
 struct VideoEncoderConfig {
-    std::string backend{"checksum"};  // 视频编码后端名称。
-    int mock_keyframe_interval{30};   // 每隔多少视频帧标记一个关键帧。
+    std::string backend{"checksum"};    // 视频编码后端名称。
+    int mock_keyframe_interval{30};     // 每隔多少视频帧标记一个关键帧。
     std::string codec_name{"libx264"};  // FFmpeg encoder 名称，可替换为 libopenh264。
     int bitrate_bps{3'000'000};         // H.264 目标码率。
-    int gop_size{30};                    // 相邻关键帧的最大帧数。
+    int gop_size{30};                   // 相邻关键帧的最大帧数。
     std::string preset{"veryfast"};     // 支持 preset 的编码器使用的速度/压缩率取舍。
 };
 
 struct AudioEncoderConfig {
     std::string backend{"checksum"};  // 音频编码后端名称。
     std::string codec_name{"aac"};    // FFmpeg encoder 名称；aac 为原生 AAC-LC。
-    int bitrate_bps{128'000};          // AAC 目标码率。
+    int bitrate_bps{128'000};         // AAC 目标码率。
 };
 
 struct OutputConfig {
@@ -117,10 +117,10 @@ struct OutputConfig {
     std::string rtsp_transport{"tcp"};
     // RTSP 建连和单次网络 I/O 的超时守卫（毫秒）；0 表示不启用，交给 FFmpeg 默认值。
     int rtsp_timeout_ms{5000};
-    std::size_t queue_capacity{16};  // 此输出独立队列的包数量上限。
+    std::size_t queue_capacity{16};                               // 此输出独立队列的包数量上限。
     OverflowPolicy overflow_policy{OverflowPolicy::kDropOldest};  // 满队列处理方式。
-    int push_timeout_ms{0};  // block_producer 最长等待时间；0 表示不等待。
-    int write_delay_ms{0};  // 每包人工写入延迟，用于模拟慢输出。
+    int push_timeout_ms{0};                           // block_producer 最长等待时间；0 表示不等待。
+    int write_delay_ms{0};                            // 每包人工写入延迟，用于模拟慢输出。
     std::optional<std::uint64_t> fail_after_packets;  // 写入 N 包后注入故障。
 };
 

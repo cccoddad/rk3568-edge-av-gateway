@@ -102,7 +102,7 @@ Result<AudioFrame> MockAudioCapture::Read(std::stop_token stop) {
         config.sample_rate * config.frame_duration_ms / 1000;  // 单声道样本数。
     const std::size_t total_samples =
         static_cast<std::size_t>(samples_per_channel) *
-        static_cast<std::size_t>(config.channels);  // 全声道样本总数。
+        static_cast<std::size_t>(config.channels);                         // 全声道样本总数。
     auto buffer = Buffer::Allocate(total_samples * sizeof(std::int16_t));  // S16_LE 输出内存。
     auto* output = reinterpret_cast<std::int16_t*>(buffer->data());  // 便于按 int16_t 写样本。
     // 相位基于全局 sample_index，而不是每块从零开始，保证块边界波形连续。

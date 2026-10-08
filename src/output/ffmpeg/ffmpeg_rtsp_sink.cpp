@@ -23,16 +23,16 @@ extern "C" {
 namespace rkav {
 namespace {
 
-Error RtspError(std::string_view operation, int code, std::string message,
-                bool retryable = false, ErrorCategory category = ErrorCategory::kIo) {
+Error RtspError(std::string_view operation, int code, std::string message, bool retryable = false,
+                ErrorCategory category = ErrorCategory::kIo) {
     std::array<char, AV_ERROR_MAX_STRING_SIZE> detail{};
     if (code < 0) {
         av_strerror(code, detail.data(), detail.size());
         message += ": ";
         message += detail.data();
     }
-    return Error{category, code, "ffmpeg_rtsp_sink", std::string(operation), std::move(message),
-                 retryable};
+    return Error{category,           code,     "ffmpeg_rtsp_sink", std::string(operation),
+                 std::move(message), retryable};
 }
 
 AVRational ToAvRational(Rational value) {
@@ -98,8 +98,7 @@ struct FfmpegRtspSink::Impl {
     /// 功能：超时守卫到点后中断 FFmpeg 的网络等待；空闲时返回 0 不影响正常 I/O。
     static int InterruptCallback(void* opaque) {
         auto* impl = static_cast<Impl*>(opaque);
-        const std::int64_t deadline =
-            impl->interrupt_deadline_us.load(std::memory_order_relaxed);
+        const std::int64_t deadline = impl->interrupt_deadline_us.load(std::memory_order_relaxed);
         if (deadline == 0) {
             return 0;
         }
@@ -131,12 +130,11 @@ struct FfmpegRtspSink::Impl {
     void DisarmTimeout() { interrupt_deadline_us.store(0, std::memory_order_relaxed); }
 
     /// 功能：把中断标记转换成明确的超时错误。
-    Error TimeoutError(std::string_view operation, std::string message,
-                       bool retryable) const {
-        return RtspError(operation, AVERROR(ETIMEDOUT),
-                         std::move(message) + " (timed out after " +
-                             std::to_string(timeout_ms) + " ms)",
-                         retryable, ErrorCategory::kTimeout);
+    Error TimeoutError(std::string_view operation, std::string message, bool retryable) const {
+        return RtspError(
+            operation, AVERROR(ETIMEDOUT),
+            std::move(message) + " (timed out after " + std::to_string(timeout_ms) + " ms)",
+            retryable, ErrorCategory::kTimeout);
     }
 
     /// 功能：只释放格式上下文，不做协议收尾。
@@ -181,8 +179,8 @@ struct FfmpegRtspSink::Impl {
 
     /// 功能：按配置间隔安排下一次重连尝试。
     void ScheduleNextReconnect() {
-        next_reconnect_at = std::chrono::steady_clock::now() +
-                            std::chrono::milliseconds(reconnect_interval_ms);
+        next_reconnect_at =
+            std::chrono::steady_clock::now() + std::chrono::milliseconds(reconnect_interval_ms);
     }
 
     /// 功能：判断是否到达允许重连的时刻；关闭重连时恒为 false。
@@ -195,8 +193,7 @@ struct FfmpegRtspSink::Impl {
         ReleaseFormat();
         // 显式选择 rtsp muxer：它标记 AVFMT_NOFILE，ANNOUNCE 连接在
         // avformat_write_header 内部完成，不能对网络 muxer 调用 avio_open。
-        const int allocated =
-            avformat_alloc_output_context2(&format, nullptr, "rtsp", url.c_str());
+        const int allocated = avformat_alloc_output_context2(&format, nullptr, "rtsp", url.c_str());
         if (allocated < 0 || format == nullptr) {
             ReleaseFormat();
             return Result<void>::Failure(
@@ -221,8 +218,8 @@ struct FfmpegRtspSink::Impl {
             AVStream* audio_stream = avformat_new_stream(format, nullptr);
             if (audio_stream == nullptr) {
                 ReleaseFormat();
-                return Result<void>::Failure(RtspError("create_stream", AVERROR(ENOMEM),
-                                                       "cannot create RTSP audio stream"));
+                return Result<void>::Failure(
+                    RtspError("create_stream", AVERROR(ENOMEM), "cannot create RTSP audio stream"));
             }
             configured = ConfigureStream(*audio_stream, audio_info);
             if (!configured) {
@@ -309,11 +306,11 @@ Result<void> FfmpegRtspSink::Open(const OutputConfig& config,
         impl_->open = true;
         impl_->flushed = false;
         impl_->ScheduleNextReconnect();
-        Logger::Instance().Log(LogLevel::kWarn, "ffmpeg_rtsp_sink", "rtsp_waiting_for_server",
-                               "RTSP server is unreachable; reconnecting on write",
-                               {{"url", impl_->url},
-                                {"retry_interval_ms",
-                                 std::to_string(impl_->reconnect_interval_ms)}});
+        Logger::Instance().Log(
+            LogLevel::kWarn, "ffmpeg_rtsp_sink", "rtsp_waiting_for_server",
+            "RTSP server is unreachable; reconnecting on write",
+            {{"url", impl_->url},
+             {"retry_interval_ms", std::to_string(impl_->reconnect_interval_ms)}});
         return Result<void>::Success();
     }
     impl_->open = true;
@@ -335,10 +332,9 @@ Result<void> FfmpegRtspSink::Write(const EncodedPacket& packet) {
     if (!impl_->connected) {
         if (!impl_->ReconnectDue()) {
             // 重连未到期：本包按丢包处理，返回可重试错误且不阻塞后续包。
-            return Result<void>::Failure(
-                RtspError("write", AVERROR(ECONNRESET),
-                          "RTSP session is disconnected; packet dropped before next reconnect",
-                          true));
+            return Result<void>::Failure(RtspError(
+                "write", AVERROR(ECONNRESET),
+                "RTSP session is disconnected; packet dropped before next reconnect", true));
         }
         auto reconnected = impl_->Connect();  // 本次重连尝试结果。
         if (!reconnected) {
@@ -416,9 +412,8 @@ Result<void> FfmpegRtspSink::Write(const EncodedPacket& packet) {
             return Result<void>::Failure(
                 impl_->TimeoutError("write_packet", "RTSP session I/O stalled", retryable));
         }
-        return Result<void>::Failure(RtspError("write_packet", written,
-                                               "cannot interleave packet into RTSP stream",
-                                               retryable));
+        return Result<void>::Failure(RtspError(
+            "write_packet", written, "cannot interleave packet into RTSP stream", retryable));
     }
     return Result<void>::Success();
 }

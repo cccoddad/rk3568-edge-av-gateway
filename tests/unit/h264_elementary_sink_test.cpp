@@ -1,5 +1,5 @@
 // 文件作用：验证 H.264 裸码流 Sink 的临时文件完成语义和音频包消费边界。
-#include "rkav/output/sinks.h"
+#include <gtest/gtest.h>
 
 #include <chrono>
 #include <filesystem>
@@ -7,7 +7,7 @@
 #include <iterator>
 #include <string>
 
-#include <gtest/gtest.h>
+#include "rkav/output/sinks.h"
 
 namespace rkav {
 namespace {
@@ -82,7 +82,8 @@ TEST(H264ElementarySinkTest, FinalizesOnlyAfterFlushAndWritesOnlyVideoPayload) {
     EXPECT_TRUE(std::filesystem::exists(final_path));
     EXPECT_FALSE(std::filesystem::exists(partial_path));
     std::ifstream input(final_path, std::ios::binary);
-    const std::string content{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    const std::string content{std::istreambuf_iterator<char>(input),
+                              std::istreambuf_iterator<char>()};
     EXPECT_EQ(content, std::string("\0\0\1\x65\x88", 5));
     input.close();
 

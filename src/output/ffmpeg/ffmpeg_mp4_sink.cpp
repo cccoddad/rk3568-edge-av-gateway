@@ -56,8 +56,7 @@ Result<void> ConfigureStream(AVStream& stream, const EncodedStreamInfo& info) {
     }
     if (!info.extradata.empty()) {
         const std::size_t padded_size = info.extradata.size() + AV_INPUT_BUFFER_PADDING_SIZE;
-        parameters->extradata =
-            static_cast<std::uint8_t*>(av_mallocz(padded_size));
+        parameters->extradata = static_cast<std::uint8_t*>(av_mallocz(padded_size));
         if (parameters->extradata == nullptr) {
             return Result<void>::Failure(
                 Mp4Error("configure_stream", AVERROR(ENOMEM), "cannot allocate codec extradata"));
@@ -102,22 +101,20 @@ Result<void> FfmpegMp4Sink::Open(const OutputConfig& config,
                                  std::span<const EncodedStreamInfo> streams) {
     std::scoped_lock lock(impl_->mutex);
     if (impl_->open) {
-        return Result<void>::Failure(
-            Mp4Error("open", AVERROR(EINVAL), "sink is already open"));
+        return Result<void>::Failure(Mp4Error("open", AVERROR(EINVAL), "sink is already open"));
     }
     impl_->final_path = std::filesystem::path(config.path);
     impl_->temporary_path = std::filesystem::path(config.path + ".part");
     if (impl_->final_path.empty()) {
-        return Result<void>::Failure(
-            Mp4Error("open", AVERROR(EINVAL), "MP4 output path is empty"));
+        return Result<void>::Failure(Mp4Error("open", AVERROR(EINVAL), "MP4 output path is empty"));
     }
     std::error_code filesystem_error;
     if (impl_->final_path.has_parent_path()) {
         std::filesystem::create_directories(impl_->final_path.parent_path(), filesystem_error);
         if (filesystem_error) {
-            return Result<void>::Failure(Mp4Error(
-                "create_directory", AVERROR(EIO),
-                "cannot create MP4 output directory: " + filesystem_error.message()));
+            return Result<void>::Failure(
+                Mp4Error("create_directory", AVERROR(EIO),
+                         "cannot create MP4 output directory: " + filesystem_error.message()));
         }
     }
 
@@ -176,8 +173,7 @@ Result<void> FfmpegMp4Sink::Open(const OutputConfig& config,
     av_dict_free(&options);
     if (header < 0) {
         impl_->Release();
-        return Result<void>::Failure(
-            Mp4Error("write_header", header, "cannot write MP4 header"));
+        return Result<void>::Failure(Mp4Error("write_header", header, "cannot write MP4 header"));
     }
     impl_->open = true;
     impl_->finalized = false;
@@ -187,8 +183,7 @@ Result<void> FfmpegMp4Sink::Open(const OutputConfig& config,
 Result<void> FfmpegMp4Sink::Write(const EncodedPacket& packet) {
     std::scoped_lock lock(impl_->mutex);
     if (!impl_->open || impl_->finalized) {
-        return Result<void>::Failure(
-            Mp4Error("write", AVERROR(EINVAL), "sink is not writable"));
+        return Result<void>::Failure(Mp4Error("write", AVERROR(EINVAL), "sink is not writable"));
     }
     auto validation = ValidatePacket(packet);
     if (!validation) {
@@ -200,9 +195,8 @@ Result<void> FfmpegMp4Sink::Write(const EncodedPacket& packet) {
         return Result<void>::Failure(
             Mp4Error("write", AVERROR_INVALIDDATA, "packet codec changed after MP4 header"));
     }
-    const int stream_index = packet.kind == StreamKind::kVideo
-                                 ? *impl_->video_stream_index
-                                 : *impl_->audio_stream_index;
+    const int stream_index =
+        packet.kind == StreamKind::kVideo ? *impl_->video_stream_index : *impl_->audio_stream_index;
     AVPacket* mux_packet = av_packet_alloc();
     if (mux_packet == nullptr) {
         return Result<void>::Failure(
@@ -253,9 +247,9 @@ Result<void> FfmpegMp4Sink::Flush() {
     std::error_code filesystem_error;
     std::filesystem::rename(impl_->temporary_path, impl_->final_path, filesystem_error);
     if (filesystem_error) {
-        return Result<void>::Failure(Mp4Error(
-            "publish_file", AVERROR(EIO),
-            "cannot atomically publish MP4 file: " + filesystem_error.message()));
+        return Result<void>::Failure(
+            Mp4Error("publish_file", AVERROR(EIO),
+                     "cannot atomically publish MP4 file: " + filesystem_error.message()));
     }
     impl_->finalized = true;
     return Result<void>::Success();

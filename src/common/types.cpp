@@ -186,20 +186,19 @@ Result<void> ValidatePacket(const EncodedPacket& packet) {
 Result<void> ValidateStreamInfo(const EncodedStreamInfo& info) {
     if (info.codec == Codec::kUnknown || info.time_base.numerator <= 0 ||
         info.time_base.denominator <= 0) {
-        return Result<void>::Failure(ValidationError("encoded stream codec or time base is invalid"));
+        return Result<void>::Failure(
+            ValidationError("encoded stream codec or time base is invalid"));
     }
     if (info.kind == StreamKind::kVideo) {
         if (info.codec != Codec::kMockVideoChecksum && info.codec != Codec::kH264) {
-            return Result<void>::Failure(
-                ValidationError("video stream uses a non-video codec"));
+            return Result<void>::Failure(ValidationError("video stream uses a non-video codec"));
         }
         if (info.width <= 0 || info.height <= 0) {
             return Result<void>::Failure(ValidationError("video stream dimensions are invalid"));
         }
     } else {
         if (info.codec != Codec::kMockAudioChecksum && info.codec != Codec::kAac) {
-            return Result<void>::Failure(
-                ValidationError("audio stream uses a non-audio codec"));
+            return Result<void>::Failure(ValidationError("audio stream uses a non-audio codec"));
         }
         if (info.sample_rate <= 0 || info.channels <= 0) {
             return Result<void>::Failure(ValidationError("audio stream parameters are invalid"));

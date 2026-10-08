@@ -4,10 +4,10 @@
 
 #include <vector>
 
+#include "rkav/capture/video_capture.h"
 #include "rkav/common/result.h"
 #include "rkav/common/types.h"
 #include "rkav/config/config.h"
-#include "rkav/capture/video_capture.h"
 
 namespace rkav {
 

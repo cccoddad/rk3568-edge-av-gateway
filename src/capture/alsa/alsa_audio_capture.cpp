@@ -137,7 +137,7 @@ Error ReadError(std::string_view operation, int native_code) {
 }
 
 Error PollError(int file_descriptor) {
-    struct snd_pcm_status status {};
+    struct snd_pcm_status status{};
     if (IoctlRetry(file_descriptor, SNDRV_PCM_IOCTL_STATUS, &status) < 0) {
         const int native_code = errno;
         if (native_code == ENODEV || native_code == ENXIO || native_code == EIO) {
@@ -189,14 +189,14 @@ Result<AudioCapabilities> AlsaAudioCapture::Open(const AudioConfig& config) {
         return Result<AudioCapabilities>::Failure(std::move(error));
     };
 
-    struct snd_pcm_info info {};
+    struct snd_pcm_info info{};
     info.stream = SNDRV_PCM_STREAM_CAPTURE;
     if (IoctlRetry(file_descriptor_, SNDRV_PCM_IOCTL_INFO, &info) < 0) {
         return fail_and_close(ReadError("query_info", errno));
     }
 
     const int requested_samples = config.sample_rate * config.frame_duration_ms / 1000;
-    struct snd_pcm_hw_params parameters {};
+    struct snd_pcm_hw_params parameters{};
     InitializeAny(parameters);
     SetMask(parameters, SNDRV_PCM_HW_PARAM_ACCESS, SNDRV_PCM_ACCESS_RW_INTERLEAVED);
     SetMask(parameters, SNDRV_PCM_HW_PARAM_FORMAT, SNDRV_PCM_FORMAT_S16_LE);
@@ -231,7 +231,7 @@ Result<AudioCapabilities> AlsaAudioCapture::Open(const AudioConfig& config) {
     }
     const snd_pcm_uframes_t buffer_frames = period_frames * period_count;
 
-    struct snd_pcm_sw_params software {};
+    struct snd_pcm_sw_params software{};
     software.period_step = 1U;
     software.avail_min = period_frames;
     software.start_threshold = 1U;
@@ -327,7 +327,7 @@ Result<AudioFrame> AlsaAudioCapture::Read(std::stop_token stop) {
         if ((descriptor.revents & POLLERR) != 0) {
             return Result<AudioFrame>::Failure(PollError(file_descriptor_));
         }
-        struct snd_xferi transfer {};
+        struct snd_xferi transfer{};
         transfer.buf =
             reinterpret_cast<std::int16_t*>(buffer->data()) + completed_frames * channels;
         transfer.frames = static_cast<snd_pcm_uframes_t>(frames - completed_frames);

@@ -1,10 +1,10 @@
 // 文件作用：验证 CPU OSD 的像素复制、边框裁剪、文字标签和格式边界。
-#include "rkav/vision/overlay.h"
-
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <cstddef>
+
+#include "rkav/vision/overlay.h"
 
 namespace rkav {
 namespace {

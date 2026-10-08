@@ -25,10 +25,10 @@ void HandleSignal(int) { g_signal_requested = 1; }
 
 struct CommandLine {
     std::string config_path{"config/mock.json"};  // JSON 配置文件路径。
-    std::optional<int> duration_seconds;  // CLI 运行秒数覆盖值；未设置则使用 JSON。
-    bool validate_only{false};            // 只校验配置，不启动任何 worker。
-    bool show_help{false};                // 输出帮助后退出。
-    bool show_version{false};             // 输出版本后退出。
+    std::optional<int> duration_seconds;          // CLI 运行秒数覆盖值；未设置则使用 JSON。
+    bool validate_only{false};                    // 只校验配置，不启动任何 worker。
+    bool show_help{false};                        // 输出帮助后退出。
+    bool show_version{false};                     // 输出版本后退出。
 };
 
 /// 功能：把可用参数和含义打印到标准输出。
@@ -68,7 +68,7 @@ rkav::Result<CommandLine> ParseArguments(int argc, char* argv[]) {
                                 "--duration requires a non-negative integer", false});
             }
             const std::string text = argv[++index];  // --duration 后的原始文本。
-            int duration = -1;  // 解析后的秒数；-1 用来检测未正确赋值。
+            int duration = -1;                       // 解析后的秒数；-1 用来检测未正确赋值。
             // from_chars 不受本地化环境影响，并能严格拒绝夹杂其他字符的数值。
             const auto [end, error] =
                 std::from_chars(text.data(), text.data() + text.size(), duration);

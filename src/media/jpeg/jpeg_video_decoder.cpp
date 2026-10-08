@@ -81,19 +81,16 @@ Result<VideoFrame> JpegVideoDecoder::Decode(const VideoFrame& frame) {
         return Result<VideoFrame>::Failure(validation.error());
     }
     if (frame.memory.kind != MemoryKind::kCpu || frame.format != PixelFormat::kMjpeg) {
-        return Result<VideoFrame>::Failure(
-            DecoderError(ErrorCategory::kNotSupported, "decode",
-                         "JPEG decoder requires a CPU MJPEG frame"));
+        return Result<VideoFrame>::Failure(DecoderError(ErrorCategory::kNotSupported, "decode",
+                                                        "JPEG decoder requires a CPU MJPEG frame"));
     }
 
-    const auto* const compressed =
-        reinterpret_cast<const unsigned char*>(frame.buffer->data());
+    const auto* const compressed = reinterpret_cast<const unsigned char*>(frame.buffer->data());
     const std::size_t compressed_size = frame.buffer->size();
     if (tj3DecompressHeader(impl_->handle, compressed, compressed_size) < 0) {
-        return Result<VideoFrame>::Failure(
-            DecoderError(ErrorCategory::kCodec, "read_header",
-                         TurboJpegMessage(impl_->handle, "invalid or incomplete JPEG header"),
-                         true));
+        return Result<VideoFrame>::Failure(DecoderError(
+            ErrorCategory::kCodec, "read_header",
+            TurboJpegMessage(impl_->handle, "invalid or incomplete JPEG header"), true));
     }
 
     const int width = tj3Get(impl_->handle, TJPARAM_JPEGWIDTH);
@@ -117,9 +114,8 @@ Result<VideoFrame> JpegVideoDecoder::Decode(const VideoFrame& frame) {
     try {
         pixels = Buffer::Allocate(row_bytes * rows);
     } catch (const std::bad_alloc&) {
-        return Result<VideoFrame>::Failure(
-            DecoderError(ErrorCategory::kResourceExhausted, "allocate",
-                         "cannot allocate decoded RGB frame"));
+        return Result<VideoFrame>::Failure(DecoderError(
+            ErrorCategory::kResourceExhausted, "allocate", "cannot allocate decoded RGB frame"));
     }
 
     auto* const destination = reinterpret_cast<unsigned char*>(pixels->data());
@@ -130,8 +126,14 @@ Result<VideoFrame> JpegVideoDecoder::Decode(const VideoFrame& frame) {
                          TurboJpegMessage(impl_->handle, "JPEG decompression failed"), true));
     }
 
-    VideoFrame decoded{frame.sequence, frame.pts_us, width, height, stride, PixelFormat::kRgb888,
-                       std::move(pixels), FrameMemory{MemoryKind::kCpu, -1},
+    VideoFrame decoded{frame.sequence,
+                       frame.pts_us,
+                       width,
+                       height,
+                       stride,
+                       PixelFormat::kRgb888,
+                       std::move(pixels),
+                       FrameMemory{MemoryKind::kCpu, -1},
                        frame.inference_submitted};
     auto decoded_validation = ValidateVideoFrame(decoded);
     if (!decoded_validation) {

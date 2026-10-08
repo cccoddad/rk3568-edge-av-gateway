@@ -13,8 +13,7 @@ class IOverlay {
     virtual ~IOverlay() = default;
 
     // 返回独立缓冲区的图像，禁止改写可能仍被推理分支共享的源帧。
-    virtual Result<VideoFrame> Apply(const VideoFrame& frame,
-                                     const DetectionBatch& detections) = 0;
+    virtual Result<VideoFrame> Apply(const VideoFrame& frame, const DetectionBatch& detections) = 0;
 };
 
 // CPU 基线只处理 RGB/BGR；后续 RGA 实现保持相同数据契约。
@@ -22,8 +21,7 @@ class CpuOverlay final : public IOverlay {
    public:
     explicit CpuOverlay(OverlayConfig config) : config_(std::move(config)) {}
 
-    Result<VideoFrame> Apply(const VideoFrame& frame,
-                             const DetectionBatch& detections) override;
+    Result<VideoFrame> Apply(const VideoFrame& frame, const DetectionBatch& detections) override;
 
    private:
     OverlayConfig config_;

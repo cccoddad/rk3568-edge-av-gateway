@@ -131,7 +131,7 @@ Result<void> JsonLinePacketSink::Open(const OutputConfig& config,
             return validation;
         }
     }
-    std::error_code error;  // 使用 error_code 避免文件系统异常穿出接口。
+    std::error_code error;                          // 使用 error_code 避免文件系统异常穿出接口。
     const std::filesystem::path path(config.path);  // 配置转换后的平台路径。
     if (path.has_parent_path()) {
         std::filesystem::create_directories(path.parent_path(), error);
@@ -225,12 +225,12 @@ Result<void> H264ElementarySink::Open(const OutputConfig& config,
         if (!validation) {
             return validation;
         }
-        has_h264_video = has_h264_video ||
-                         (stream.kind == StreamKind::kVideo && stream.codec == Codec::kH264);
+        has_h264_video =
+            has_h264_video || (stream.kind == StreamKind::kVideo && stream.codec == Codec::kH264);
     }
     if (!has_h264_video) {
-        return Result<void>::Failure(SinkError(
-            "h264_sink", ErrorCategory::kInvalidConfig, "H.264 elementary output requires H.264 video"));
+        return Result<void>::Failure(SinkError("h264_sink", ErrorCategory::kInvalidConfig,
+                                               "H.264 elementary output requires H.264 video"));
     }
     final_path_ = std::filesystem::path(config.path);
     partial_path_ = final_path_;
@@ -239,14 +239,16 @@ Result<void> H264ElementarySink::Open(const OutputConfig& config,
     if (final_path_.has_parent_path()) {
         std::filesystem::create_directories(final_path_.parent_path(), error);
         if (error) {
-            return Result<void>::Failure(SinkError(
-                "h264_sink", ErrorCategory::kIo,
-                "cannot create output directory: " + error.message()));
+            return Result<void>::Failure(
+                SinkError("h264_sink", ErrorCategory::kIo,
+                          "cannot create output directory: " + error.message()));
         }
     }
-    if (std::filesystem::exists(final_path_, error) || std::filesystem::exists(partial_path_, error)) {
-        return Result<void>::Failure(SinkError(
-            "h264_sink", ErrorCategory::kIo, "refusing to overwrite an existing H.264 evidence file"));
+    if (std::filesystem::exists(final_path_, error) ||
+        std::filesystem::exists(partial_path_, error)) {
+        return Result<void>::Failure(
+            SinkError("h264_sink", ErrorCategory::kIo,
+                      "refusing to overwrite an existing H.264 evidence file"));
     }
     output_.open(partial_path_, std::ios::out | std::ios::binary);
     if (!output_) {
@@ -286,8 +288,8 @@ Result<void> H264ElementarySink::Write(const EncodedPacket& packet) {
     }
     if (packet.kind == StreamKind::kVideo) {
         if (packet.codec != Codec::kH264) {
-            return Result<void>::Failure(SinkError(
-                "h264_sink", ErrorCategory::kCodec, "video packet is not H.264"));
+            return Result<void>::Failure(
+                SinkError("h264_sink", ErrorCategory::kCodec, "video packet is not H.264"));
         }
         if (config_.validate_timestamps) {
             validation = ValidateVideoTimestamp(packet);
@@ -321,8 +323,8 @@ Result<void> H264ElementarySink::Flush() {
     std::error_code error;
     std::filesystem::rename(partial_path_, final_path_, error);
     if (error) {
-        return Result<void>::Failure(SinkError(
-            "h264_sink", ErrorCategory::kIo, "cannot finalize H.264 output: " + error.message()));
+        return Result<void>::Failure(SinkError("h264_sink", ErrorCategory::kIo,
+                                               "cannot finalize H.264 output: " + error.message()));
     }
     flushed_ = true;
     return Result<void>::Success();
@@ -352,12 +354,10 @@ Result<std::unique_ptr<IPacketSink>> CreatePacketSink(const OutputConfig& config
     }
 #if RKAV_WITH_FFMPEG
     if (config.type == "mp4") {
-        return Result<std::unique_ptr<IPacketSink>>::Success(
-            std::make_unique<FfmpegMp4Sink>());
+        return Result<std::unique_ptr<IPacketSink>>::Success(std::make_unique<FfmpegMp4Sink>());
     }
     if (config.type == "rtsp") {
-        return Result<std::unique_ptr<IPacketSink>>::Success(
-            std::make_unique<FfmpegRtspSink>());
+        return Result<std::unique_ptr<IPacketSink>>::Success(std::make_unique<FfmpegRtspSink>());
     }
 #endif
     return Result<std::unique_ptr<IPacketSink>>::Failure(SinkError(

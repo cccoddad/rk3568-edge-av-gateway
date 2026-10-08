@@ -228,8 +228,7 @@ Result<void> Application::CreateAndOpenBackends() {
                             {"height", std::to_string(video_opened.value().height)},
                             {"fps", std::to_string(video_opened.value().fps)},
                             {"format", ToString(video_opened.value().format)}});
-    if (config_.inference.backend == "rknn" &&
-        video_opened.value().format == PixelFormat::kMjpeg) {
+    if (config_.inference.backend == "rknn" && video_opened.value().format == PixelFormat::kMjpeg) {
 #if RKAV_WITH_JPEG
         video_decoder_ = std::make_unique<JpegVideoDecoder>();
         auto decoder_opened = video_decoder_->Open();
@@ -303,8 +302,8 @@ Result<void> Application::CreateAndOpenBackends() {
     if (video_encode_decoder_) {
         video_encoder_input.format = PixelFormat::kRgb888;
     }
-    auto video_encoder_opened = video_encoder_->Open(
-        config_.video_encoder, video_encoder_input);  // 解码后实际编码输入。
+    auto video_encoder_opened =
+        video_encoder_->Open(config_.video_encoder, video_encoder_input);  // 解码后实际编码输入。
     if (!video_encoder_opened) {
         inference_->Close();
         audio_capture_->Close();
@@ -361,7 +360,8 @@ Result<void> Application::CreateRouter() {
         if (!sink) {
             return Result<void>::Failure(sink.error());
         }
-        auto added = router_->AddSink(output, std::move(sink).value(), encoded_streams_);  // 注册结果。
+        auto added =
+            router_->AddSink(output, std::move(sink).value(), encoded_streams_);  // 注册结果。
         if (!added) {
             return added;
         }
@@ -681,7 +681,7 @@ void Application::InferenceLoop(std::stop_token stop) {
             inference_frame = std::move(decoded).value();
         }
         metrics_.Increment(MetricCounter::kInferenceRequests);
-        const TimestampUs started = clock_->NowUs();  // 本次推理开始时间，单位微秒。
+        const TimestampUs started = clock_->NowUs();             // 本次推理开始时间，单位微秒。
         auto result = inference_->Infer(inference_frame, stop);  // 推理后端返回结果。
         metrics_.ObserveLatency("inference", clock_->NowUs() - started);
         if (!result) {
@@ -749,19 +749,20 @@ void Application::VideoEncodeLoop(std::stop_token stop) {
                 detection_condition_.wait_for(
                     lock, std::chrono::milliseconds(config_.overlay.wait_for_result_ms),
                     [this, &encode_frame, stop] {
-                        return stop.stop_requested() || stop_requested_.load(std::memory_order_acquire) ||
+                        return stop.stop_requested() ||
+                               stop_requested_.load(std::memory_order_acquire) ||
                                (latest_detection_ &&
                                 latest_detection_->frame_sequence >= encode_frame.sequence);
                     });
             }
             latest = latest_detection_;
         }
-        const bool exact_detection =
-            latest && latest->frame_sequence == encode_frame.sequence &&
-            latest->source_pts_us == encode_frame.pts_us;
+        const bool exact_detection = latest && latest->frame_sequence == encode_frame.sequence &&
+                                     latest->source_pts_us == encode_frame.pts_us;
         if (overlay_ && exact_detection) {
             const TimestampUs result_age_us = clock_->NowUs() - latest->completed_at_us;
-            if (result_age_us <= static_cast<TimestampUs>(config_.inference.max_result_age_ms) * 1000) {
+            if (result_age_us <=
+                static_cast<TimestampUs>(config_.inference.max_result_age_ms) * 1000) {
                 const TimestampUs overlay_started = clock_->NowUs();
                 auto overlaid = overlay_->Apply(encode_frame, *latest);
                 metrics_.ObserveLatency("overlay", clock_->NowUs() - overlay_started);
@@ -785,7 +786,7 @@ void Application::VideoEncodeLoop(std::stop_token stop) {
                 metrics_.Increment(MetricCounter::kOverlaySkipped);
             }
         }
-        const TimestampUs started = clock_->NowUs();       // 视频编码开始时间。
+        const TimestampUs started = clock_->NowUs();          // 视频编码开始时间。
         auto encoded = video_encoder_->Encode(encode_frame);  // 零到多个编码包。
         metrics_.ObserveLatency("video_encode", clock_->NowUs() - started);
         if (!encoded) {
@@ -865,8 +866,8 @@ void Application::MonitorLoop(std::stop_token stop) {
         static_cast<TimestampUs>(config_.monitoring.metrics_interval_ms) * 1000;
     const TimestampUs health_interval_us =
         static_cast<TimestampUs>(config_.monitoring.health_interval_ms) * 1000;
-    const TimestampUs started_us = clock_->NowUs();              // 监控线程时间轴起点。
-    TimestampUs next_report = started_us + metrics_interval_us;  // 下一次指标 deadline。
+    const TimestampUs started_us = clock_->NowUs();                   // 监控线程时间轴起点。
+    TimestampUs next_report = started_us + metrics_interval_us;       // 下一次指标 deadline。
     TimestampUs next_health_check = started_us + health_interval_us;  // 下一次健康检查。
     while (!stop.stop_requested()) {
         // 指标和健康检查周期彼此独立，每次只睡到二者中更早的 deadline。

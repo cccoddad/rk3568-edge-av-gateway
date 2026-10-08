@@ -2,14 +2,14 @@
 // 主要知识点：每 Sink 独立线程队列、错误分类、retryable 语义、致命错误汇聚。
 #include "rkav/output/packet_router.h"
 
+#include <gtest/gtest.h>
+
 #include <atomic>
 #include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
 #include <thread>
-
-#include <gtest/gtest.h>
 
 #include "rkav/common/buffer.h"
 #include "rkav/common/clock.h"
@@ -92,8 +92,7 @@ TEST(PacketRouterTest, RetryableFailuresKeepWorkerAliveAndRecover) {
     for (int i = 0; i < 8; ++i) {
         router.Submit(MakePacket());
     }
-    EXPECT_TRUE(
-        WaitUntil([raw] { return raw->writes() >= 8; }, std::chrono::milliseconds(2000)));
+    EXPECT_TRUE(WaitUntil([raw] { return raw->writes() >= 8; }, std::chrono::milliseconds(2000)));
     EXPECT_EQ(raw->writes(), 8);
     EXPECT_EQ(raw->successes(), 5);
     router.Stop(CloseMode::kDrain);
@@ -116,8 +115,7 @@ TEST(PacketRouterTest, NonRetryableFailureStillIsolatesOptionalSink) {
     for (int i = 0; i < 6; ++i) {
         router.Submit(MakePacket());
     }
-    EXPECT_TRUE(
-        WaitUntil([raw] { return raw->writes() >= 1; }, std::chrono::milliseconds(2000)));
+    EXPECT_TRUE(WaitUntil([raw] { return raw->writes() >= 1; }, std::chrono::milliseconds(2000)));
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     EXPECT_EQ(raw->writes(), 1);
     router.Stop(CloseMode::kDrain);
@@ -137,8 +135,8 @@ TEST(PacketRouterTest, NonRetryableFailureOnRequiredSinkIsFatal) {
     ASSERT_TRUE(router.Start());
 
     router.Submit(MakePacket());
-    EXPECT_TRUE(WaitUntil([&router] { return router.has_fatal_error(); },
-                          std::chrono::milliseconds(2000)));
+    EXPECT_TRUE(
+        WaitUntil([&router] { return router.has_fatal_error(); }, std::chrono::milliseconds(2000)));
     router.Stop(CloseMode::kDrain);
 
     ASSERT_TRUE(router.fatal_error().has_value());
